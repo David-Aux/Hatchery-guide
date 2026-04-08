@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>All Batches — Hatchery Guide</title>
+  <link rel="stylesheet" href="styles.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    .filter-bar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+
+    .filter-btn {
+      padding: 7px 16px;
+      border-radius: 99px;
+      border: 1.5px solid var(--parchment);
+      background: #fff;
+      font-family: var(--font-body);
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--ink-light);
+      cursor: pointer;
+      transition: all 0.18s;
+    }
+    .filter-btn:hover  { border-color: var(--amber); color: var(--ink); }
+    .filter-btn.active { background: var(--amber); border-color: var(--amber); color: #fff; }
+
+    .batch-row {
+      display: grid;
+      grid-template-columns: 2fr 80px 80px 90px 100px 110px 80px;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--cream-dark);
+      cursor: pointer;
+      transition: background 0.15s;
+      text-decoration: none;
+      color: inherit;
+    }
+    .batch-row:hover { background: var(--cream); }
+    .batch-row:last-child { border-bottom: none; }
+
+    .batch-row-header {
+      cursor: default;
+      background: var(--cream);
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--ink-faint);
+      padding: 10px 20px;
+      border-bottom: 2px solid var(--parchment);
+    }
+    .batch-row-header:hover { background: var(--cream); }
+
+    .batch-name-cell strong { display: block; font-size: 0.9rem; color: var(--ink); margin-bottom: 2px; }
+    .batch-name-cell span   { font-size: 0.72rem; color: var(--ink-faint); }
+
+    .day-chip {
+      background: var(--amber-pale);
+      color: var(--amber-dark);
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 99px;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .search-input-wrap {
+      position: relative;
+      flex: 1;
+      max-width: 280px;
+    }
+    .search-input-wrap::before {
+      content: '🔍';
+      position: absolute;
+      left: 12px; top: 50%;
+      transform: translateY(-50%);
+      font-size: 0.85rem;
+      pointer-events: none;
+    }
+    .search-input {
+      padding-left: 36px !important;
+    }
+
+    @media (max-width: 768px) {
+      .batch-row {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+      .batch-row-header { display: none; }
+      .batch-row {
+        padding: 16px;
+        border-radius: var(--radius-md);
+        margin-bottom: 8px;
+        border: 1px solid var(--parchment);
+      }
+      .batch-row:hover { box-shadow: var(--shadow-sm); }
+    }
+  </style>
+</head>
+<body>
+<script src="app.js"></script>
+<script src="shell.js"></script>
+<script>
+let allBatches  = [];
+let filterState = 'all';
+let searchQuery = '';
+
+(async () => {
+  const ctx = await initShell({ page: 'batches', title: 'All Batches' });
+  if (!ctx) return;
+
+  const { data: batches } = await db
+    .from('batches')
+    .select('*, incubators(name), candling_records(*), hatch_records(*)')
+    .eq('user_id', ctx.user.id)
+    .order('created_at', { ascending: false });
+
+  allBatches = batches || [];
+  renderPage();
+})();
+
+function renderPage() {
+  const pb = document.getElementById('page-body');
+
+  const active    = allBatches.filter(b => b.status === 'active').length;
+  const completed = allBatches.filter(b => b.status === 'completed').length;
+
+  pb.innerHTML = `
+    <div class="page-header">
+      <div class="page-header-inner">
+        <div>
+          <h1>All Batches</h1>
+          <p>${allBatches.length} total · ${active} active · ${completed} completed</p>
+        </div>
+        <a href="new-batch.html" class="btn btn-primary">+ New Batch</a>
+      </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="filter-bar">
+      <div class="search-input-wrap">
+        <input type="text" class="form-input search-input" id="search-input"
+          placeholder="Search batches…" oninput="onSearch(this.value)"/>
+      </div>
+      <button class="filter-btn active" onclick="setFilter('all', this)">All (${allBatches.length})</button>
+      <button class="filter-btn" onclick="setFilter('active', this)">Active (${active})</button>
+      <button class="filter-btn" onclick="setFilter('completed', this)">Completed (${completed})</button>
+    </div>
+
+    <!-- Batches Table -->
+    <div class="card">
+      <div class="card-body-flush">
+        <div class="batch-row batch-row-header">
+          <div>Batch</div>
+          <div>Eggs Set</div>
+          <div>Progress</div>
+          <div>Hatch Date</div>
+          <div>Hatch %</div>
+          <div>Status</div>
+          <div>Actions</div>
+        </div>
+        <div id="batch-list">
+          ${renderBatchRows(allBatches)}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderBatchRows(batches) {
+  if (batches.length === 0) {
+    return `<div class="empty-state" style="padding:48px">
+      <div class="empty-icon">🥚</div>
+      <h3>No batches found</h3>
+      <p>Try adjusting your search or filter.</p>
+    </div>`;
+  }
+
+  return batches.map(b => {
+    const day      = b.status === 'active' ? incubationDay(b.start_date) : 21;
+    const pct      = Math.round((day / 21) * 100);
+    const hatchDt  = hatchDate(b.start_date);
+    const hr       = b.hatch_records?.[0];
+    const hatchPct = hr && b.eggs_set ? ((hr.hatched / b.eggs_set) * 100).toFixed(1) + '%' : '—';
+    const pctNum   = hr && b.eggs_set ? (hr.hatched / b.eggs_set) * 100 : 0;
+    const stage    = Analytics.getStage(day);
+
+    const statusBadge = b.status === 'active'
+      ? `<span class="badge badge-amber">🟡 Active · Day ${day}</span>`
+      : `<span class="badge badge-green">✓ Completed</span>`;
+
+    return `
+      <a href="batch-detail.html?id=${b.id}" class="batch-row">
+        <div class="batch-name-cell">
+          <strong>${b.batch_name}</strong>
+          <span>${b.breed || 'Broiler/Layer'} · ${b.egg_source || '—'} ${b.incubators?.name ? '· ' + b.incubators.name : ''}</span>
+        </div>
+        <div style="font-weight:600; font-size:0.88rem">${b.eggs_set?.toLocaleString()}</div>
+        <div>
+          ${b.status === 'active' ? `
+            <div class="day-chip">Day ${day}</div>
+            <div class="progress-wrap mt-4" style="height:4px">
+              <div class="progress-bar" style="width:${pct}%; background:${stage?.color || 'var(--amber)'}; height:4px"></div>
+            </div>` : `
+            <div class="progress-wrap" style="height:6px">
+              <div class="progress-bar green" style="width:100%; height:6px"></div>
+            </div>`}
+        </div>
+        <div style="font-size:0.82rem; color:var(--ink-mid)">${formatDate(hatchDt)}</div>
+        <div>
+          ${hr ? `<span class="badge ${pctNum>=80?'badge-green':pctNum>=65?'badge-amber':'badge-red'}">${hatchPct}</span>` : '—'}
+        </div>
+        <div>${statusBadge}</div>
+        <div onclick="event.preventDefault(); event.stopPropagation()">
+          <div style="display:flex; gap:4px; flex-wrap:wrap">
+            ${b.status === 'active' && day >= 7 ? `<a href="candling.html?id=${b.id}" class="btn btn-ghost btn-sm">🕯</a>` : ''}
+            ${b.status === 'active' && day >= 20 ? `<a href="hatch-results.html?id=${b.id}" class="btn btn-green btn-sm">🐥</a>` : ''}
+            ${hr ? `<a href="analytics.html?id=${b.id}" class="btn btn-ghost btn-sm">📊</a>` : ''}
+            <button class="btn btn-danger btn-sm" onclick="deleteBatch('${b.id}', '${b.batch_name}')">✕</button>
+          </div>
+        </div>
+      </a>`;
+  }).join('');
+}
+
+function setFilter(filter, btn) {
+  filterState = filter;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  applyFilters();
+}
+
+function onSearch(q) {
+  searchQuery = q.toLowerCase();
+  applyFilters();
+}
+
+function applyFilters() {
+  let filtered = allBatches;
+  if (filterState !== 'all') filtered = filtered.filter(b => b.status === filterState);
+  if (searchQuery) {
+    filtered = filtered.filter(b =>
+      b.batch_name.toLowerCase().includes(searchQuery) ||
+      (b.breed || '').toLowerCase().includes(searchQuery) ||
+      (b.egg_source || '').toLowerCase().includes(searchQuery)
+    );
+  }
+  document.getElementById('batch-list').innerHTML = renderBatchRows(filtered);
+}
+
+async function deleteBatch(id, name) {
+  if (!confirm(`Delete batch "${name}"? This will also delete all candling and hatch records.`)) return;
+
+  // Delete child records first
+  await db.from('candling_records').delete().eq('batch_id', id);
+  await db.from('hatch_records').delete().eq('batch_id', id);
+  const { error } = await db.from('batches').delete().eq('id', id);
+
+  if (error) { toast('Failed to delete batch', 'error'); return; }
+  toast('Batch deleted', 'success');
+  allBatches = allBatches.filter(b => b.id !== id);
+  applyFilters();
+}
+</script>
+</body>
+</html>
