@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>New Batch — Hatchery Guide</title>
+  <link rel="stylesheet" href="styles.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    .form-section {
+      background: #fff;
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--parchment);
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+
+    .form-section-header {
+      padding: 20px 28px;
+      border-bottom: 1px solid var(--cream-dark);
+      background: var(--cream);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .form-section-header h3 {
+      font-size: 1rem;
+    }
+
+    .form-section-icon {
+      width: 36px; height: 36px;
+      border-radius: var(--radius-sm);
+      background: var(--amber-pale);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1rem;
+    }
+
+    .form-section-body { padding: 24px 28px; }
+
+    .incubator-option {
+      border: 2px solid var(--parchment);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      cursor: pointer;
+      transition: all 0.18s;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .incubator-option:hover { border-color: var(--amber); background: var(--amber-pale); }
+    .incubator-option.selected { border-color: var(--amber); background: var(--amber-pale); }
+
+    .incubator-option input[type="radio"] { display: none; }
+
+    .incubator-option-icon { font-size: 1.4rem; }
+
+    .incubator-option-text { flex: 1; }
+    .incubator-option-name { font-weight: 600; font-size: 0.9rem; color: var(--ink); }
+    .incubator-option-cap  { font-size: 0.75rem; color: var(--ink-faint); }
+
+    .incubator-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    .day-recommends {
+      background: var(--green-light);
+      border: 1.5px solid var(--green-mid);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      margin-top: 16px;
+    }
+
+    .day-recommends h4 { color: var(--green-dark); font-size: 0.85rem; margin-bottom: 8px; }
+    .day-recommends p  { color: var(--green-dark); font-size: 0.82rem; margin: 0; }
+
+    .preview-card {
+      background: var(--green-dark);
+      border-radius: var(--radius-xl);
+      padding: 24px 28px;
+      color: #fff;
+      margin-bottom: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .preview-card::after {
+      content: '🥚';
+      position: absolute;
+      right: 20px; bottom: -10px;
+      font-size: 5rem;
+      opacity: 0.12;
+    }
+
+    .preview-card h3 {
+      color: #fff;
+      font-size: 1.2rem;
+      margin-bottom: 16px;
+    }
+
+    .preview-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 16px;
+    }
+
+    .preview-item { display: flex; flex-direction: column; gap: 2px; }
+    .preview-item-value { font-family: var(--font-display); font-size: 1.1rem; font-weight: 700; color: var(--amber-light); }
+    .preview-item-label { font-size: 0.68rem; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.06em; }
+
+    @media (max-width: 600px) {
+      .incubator-grid { grid-template-columns: 1fr; }
+      .form-section-body { padding: 20px 16px; }
+    }
+  </style>
+</head>
+<body>
+<script src="app.js"></script>
+<script src="shell.js"></script>
+<script>
+let incubators = [];
+let selectedIncubatorId = null;
+let currentUser = null;
+
+(async () => {
+  const ctx = await initShell({ page: 'new-batch', title: 'Start New Batch' });
+  if (!ctx) return;
+  currentUser = ctx.user;
+
+  // Set today's date as default
+  document.getElementById('start-date').valueAsDate = new Date();
+  updatePreview();
+
+  // Load user's incubators
+  const { data } = await db
+    .from('incubators')
+    .select('*')
+    .eq('user_id', ctx.user.id)
+    .order('name');
+
+  incubators = data || [];
+  renderIncubatorGrid();
+})();
+
+function renderIncubatorGrid() {
+  const grid = document.getElementById('incubator-grid');
+  if (incubators.length === 0) {
+    grid.innerHTML = `
+      <div class="alert alert-amber" style="grid-column:1/-1">
+        <span class="alert-icon">ℹ️</span>
+        <div class="alert-text">
+          <strong>No incubators added yet</strong>
+          You can add machines in <a href="settings.html">Settings</a> or proceed without selecting one.
+        </div>
+      </div>`;
+    return;
+  }
+
+  grid.innerHTML = incubators.map(m => `
+    <div class="incubator-option" onclick="selectIncubator('${m.id}', this)" id="inc-${m.id}">
+      <div class="incubator-option-icon">🖥️</div>
+      <div class="incubator-option-text">
+        <div class="incubator-option-name">${m.name}</div>
+        <div class="incubator-option-cap">${m.capacity ? m.capacity + ' eggs' : 'Capacity unknown'} · ${m.type || 'Machine'}</div>
+      </div>
+    </div>`).join('');
+}
+
+function selectIncubator(id, el) {
+  selectedIncubatorId = id;
+  document.querySelectorAll('.incubator-option').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+function updatePreview() {
+  const name     = document.getElementById('batch-name').value || 'Unnamed Batch';
+  const eggs     = parseInt(document.getElementById('eggs-set').value) || 0;
+  const startRaw = document.getElementById('start-date').value;
+  const breed    = document.getElementById('breed').value || 'Broiler/Layer';
+
+  document.getElementById('prev-name').textContent  = name;
+  document.getElementById('prev-eggs').textContent  = eggs.toLocaleString();
+  document.getElementById('prev-breed').textContent = breed;
+
+  if (startRaw) {
+    const start   = new Date(startRaw);
+    const hatching = new Date(startRaw);
+    hatching.setDate(hatching.getDate() + 21);
+    document.getElementById('prev-start').textContent   = formatDate(startRaw);
+    document.getElementById('prev-hatch').textContent   = formatDate(hatching);
+    document.getElementById('prev-lockdown').textContent = formatDate(new Date(start.setDate(start.getDate() + 17)));
+  }
+}
+
+async function submitBatch() {
+  const batchName = document.getElementById('batch-name').value.trim();
+  const eggsSet   = parseInt(document.getElementById('eggs-set').value);
+  const startDate = document.getElementById('start-date').value;
+  const breed     = document.getElementById('breed').value.trim();
+  const eggSource = document.getElementById('egg-source').value.trim();
+  const eggWeightStart = parseFloat(document.getElementById('egg-weight').value) || null;
+  const notes     = document.getElementById('notes').value.trim();
+  const airType   = document.getElementById('air-type').value;
+
+  if (!batchName) { toast('Please enter a batch name.', 'error'); return; }
+  if (!eggsSet || eggsSet < 1) { toast('Please enter a valid number of eggs.', 'error'); return; }
+  if (!startDate) { toast('Please select a start date.', 'error'); return; }
+
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Creating batch…';
+
+  const { data, error } = await db.from('batches').insert({
+    user_id: currentUser.id,
+    batch_name: batchName,
+    eggs_set: eggsSet,
+    start_date: startDate,
+    breed: breed || 'Broiler/Layer',
+    egg_source: eggSource || null,
+    egg_weight_start: eggWeightStart,
+    incubator_id: selectedIncubatorId,
+    air_type: airType,
+    notes: notes || null,
+    status: 'active',
+  }).select().single();
+
+  if (error) {
+    toast('Failed to create batch: ' + error.message, 'error');
+    btn.disabled = false;
+    btn.innerHTML = '🐣 Start Incubation';
+    return;
+  }
+
+  toast('Batch started successfully!', 'success');
+  setTimeout(() => window.location.href = `batch-detail.html?id=${data.id}`, 800);
+}
+</script>
+<script>
+// Page body is injected after shell loads — build the form here
+document.addEventListener('DOMContentLoaded', () => {});
+window.addEventListener('load', () => {
+  const pb = document.getElementById('page-body');
+  if (!pb) return;
+
+  pb.innerHTML = `
+    <!-- Page Header -->
+    <div class="page-header">
+      <div class="page-header-inner">
+        <div>
+          <h1>Start New Batch</h1>
+          <p>Set up a new incubation batch to begin tracking.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Batch Preview -->
+    <div class="preview-card" id="preview-card">
+      <h3>📋 Batch Preview</h3>
+      <div class="preview-grid">
+        <div class="preview-item">
+          <div class="preview-item-value" id="prev-name">—</div>
+          <div class="preview-item-label">Batch Name</div>
+        </div>
+        <div class="preview-item">
+          <div class="preview-item-value" id="prev-eggs">0</div>
+          <div class="preview-item-label">Eggs Set</div>
+        </div>
+        <div class="preview-item">
+          <div class="preview-item-value" id="prev-breed">—</div>
+          <div class="preview-item-label">Breed</div>
+        </div>
+        <div class="preview-item">
+          <div class="preview-item-value" id="prev-start">—</div>
+          <div class="preview-item-label">Start Date</div>
+        </div>
+        <div class="preview-item">
+          <div class="preview-item-value" id="prev-lockdown">—</div>
+          <div class="preview-item-label">Lockdown (Day 18)</div>
+        </div>
+        <div class="preview-item">
+          <div class="preview-item-value" id="prev-hatch">—</div>
+          <div class="preview-item-label">Expected Hatch</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 1: Batch Identity -->
+    <div class="form-section">
+      <div class="form-section-header">
+        <div class="form-section-icon">🥚</div>
+        <div>
+          <h3>Batch Identity</h3>
+        </div>
+      </div>
+      <div class="form-section-body">
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Batch Name <span class="required">*</span></label>
+            <input type="text" class="form-input" id="batch-name" placeholder="e.g. Batch 001 — June 2025" oninput="updatePreview()"/>
+            <span class="form-hint">Give this batch a memorable name.</span>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Number of Eggs Set <span class="required">*</span></label>
+            <input type="number" class="form-input" id="eggs-set" placeholder="e.g. 500" min="1" oninput="updatePreview()"/>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Breed / Flock Type</label>
+            <input type="text" class="form-input" id="breed" placeholder="e.g. Broiler, Layer, Noiler" oninput="updatePreview()"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Egg Source / Farm</label>
+            <input type="text" class="form-input" id="egg-source" placeholder="e.g. Farm A, Internal flock"/>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Date Eggs Set <span class="required">*</span></label>
+            <input type="date" class="form-input" id="start-date" onchange="updatePreview()"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Average Egg Weight (grams)</label>
+            <input type="number" class="form-input" id="egg-weight" placeholder="e.g. 58" min="1" step="0.1"/>
+            <span class="form-hint">Used to calculate weight loss % at lockdown.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 2: Machine Setup -->
+    <div class="form-section">
+      <div class="form-section-header">
+        <div class="form-section-icon" style="background:var(--green-light)">🖥️</div>
+        <div>
+          <h3>Machine Setup</h3>
+        </div>
+      </div>
+      <div class="form-section-body">
+        <div class="form-group">
+          <label class="form-label">Select Incubator</label>
+          <div class="incubator-grid" id="incubator-grid">
+            <div class="empty-state" style="padding:20px;grid-column:1/-1">
+              <span class="spinner"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Air Circulation Type</label>
+          <select class="form-select" id="air-type">
+            <option value="forced_air">Forced Air (Fan)</option>
+            <option value="still_air">Still Air (No Fan)</option>
+          </select>
+          <span class="form-hint">Forced air = 37.5°C recommended. Still air = 38.3°C recommended.</span>
+        </div>
+
+        <div class="day-recommends">
+          <h4>🌡️ Day 1 Recommendations</h4>
+          <p>
+            <strong>Temperature:</strong> 37.5°C (forced air) / 38.3°C (still air) ·
+            <strong>Humidity:</strong> 50–60% RH ·
+            <strong>Turning:</strong> Every 4 hours, min 45° angle
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 3: Notes -->
+    <div class="form-section">
+      <div class="form-section-header">
+        <div class="form-section-icon" style="background:var(--blue-pale)">📝</div>
+        <div><h3>Notes (Optional)</h3></div>
+      </div>
+      <div class="form-section-body">
+        <div class="form-group">
+          <label class="form-label">Batch Notes</label>
+          <textarea class="form-textarea" id="notes" placeholder="Any special notes — egg age, flock condition, storage days, etc."></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- Submit -->
+    <div class="flex gap-12" style="justify-content:flex-end; padding-bottom:40px">
+      <a href="dashboard.html" class="btn btn-ghost btn-lg">Cancel</a>
+      <button class="btn btn-primary btn-lg" id="submit-btn" onclick="submitBatch()">
+        🐣 Start Incubation
+      </button>
+    </div>
+  `;
+
+  // Trigger preview update now that DOM is ready
+  setTimeout(updatePreview, 100);
+  setTimeout(renderIncubatorGrid, 200);
+});
+</script>
+</body>
+</html>
