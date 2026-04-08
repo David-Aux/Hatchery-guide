@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Hatch Results — Hatchery Guide</title>
+  <link rel="stylesheet" href="styles.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    .hatch-hero {
+      background: linear-gradient(135deg, var(--amber-dark) 0%, var(--amber) 100%);
+      border-radius: var(--radius-xl);
+      padding: 28px 32px;
+      color: #fff;
+      margin-bottom: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+    .hatch-hero::after {
+      content: '🐥';
+      position: absolute; right: 24px; top: 50%;
+      transform: translateY(-50%);
+      font-size: 5rem; opacity: 0.2;
+    }
+    .hatch-hero h2 { color: #fff; margin-bottom: 4px; }
+    .hatch-hero p  { color: rgba(255,255,255,0.7); font-size: 0.88rem; }
+
+    .result-counter {
+      background: #fff;
+      border-radius: var(--radius-xl);
+      border: 2px solid var(--parchment);
+      padding: 20px;
+      text-align: center;
+      transition: border-color 0.18s;
+    }
+    .result-counter:focus-within { border-color: var(--amber); }
+
+    .result-counter-icon  { font-size: 1.8rem; margin-bottom: 8px; }
+    .result-counter-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-faint); margin-bottom: 8px; }
+    .result-counter-input {
+      font-family: var(--font-display);
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--ink);
+      text-align: center;
+      border: none;
+      outline: none;
+      width: 100%;
+      background: transparent;
+    }
+    .result-counter-sub { font-size: 0.72rem; color: var(--ink-faint); margin-top: 4px; }
+
+    .results-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .live-metric {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--cream-dark);
+    }
+    .live-metric:last-child { border-bottom: none; }
+    .live-metric-label  { font-size: 0.82rem; color: var(--ink-mid); font-weight: 500; }
+    .live-metric-value  { font-family: var(--font-display); font-size: 1.1rem; font-weight: 700; color: var(--ink); }
+    .live-metric-value.good { color: var(--green-mid); }
+    .live-metric-value.warn { color: var(--amber); }
+    .live-metric-value.bad  { color: var(--red-alert); }
+
+    .interpretation-list { display: flex; flex-direction: column; gap: 8px; }
+  </style>
+</head>
+<body>
+<script src="app.js"></script>
+<script src="shell.js"></script>
+<script>
+let currentBatch  = null;
+let currentUserId = null;
+
+(async () => {
+  const ctx = await initShell({ page: 'hatch-results', title: 'Enter Hatch Results' });
+  if (!ctx) return;
+  currentUserId = ctx.user.id;
+
+  const params  = new URLSearchParams(window.location.search);
+  const batchId = params.get('id');
+
+  const { data: batches } = await db
+    .from('batches')
+    .select('*, candling_records(*)')
+    .eq('user_id', ctx.user.id)
+    .order('created_at', { ascending: false });
+
+  renderPage(batches || [], batchId);
+})();
+
+function renderPage(batches, preselectedId) {
+  const pb = document.getElementById('page-body');
+
+  pb.innerHTML = `
+    <div class="page-header">
+      <h1>🐥 Hatch Results</h1>
+      <p>Record final hatch data and get instant performance analytics.</p>
+    </div>
+
+    <div class="hatch-hero">
+      <h2>Final Hatch Entry</h2>
+      <p>Enter your counts below — metrics are calculated automatically as you type.</p>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 300px; gap:24px; align-items:start">
+      <div>
+        <!-- Batch Selector -->
+        <div class="card mb-24">
+          <div class="card-header"><h3>Select Batch</h3></div>
+          <div class="card-body">
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label">Batch <span class="required">*</span></label>
+              <select class="form-select" id="batch-select" onchange="onBatchChange(this.value)">
+                <option value="">— Select a batch —</option>
+                ${batches.map(b => `
+                  <option value="${b.id}"
+                    data-eggs="${b.eggs_set}"
+                    data-fertile="${b.candling_records?.slice().sort((a,z)=>z.day_number-a.day_number)[0]?.fertile ?? ''}"
+                    data-weight="${b.egg_weight_start ?? ''}"
+                    ${b.id === preselectedId ? 'selected' : ''}>
+                    ${b.batch_name} · ${b.eggs_set} eggs set · Day ${incubationDay(b.start_date)}
+                  </option>`).join('')}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Batch Context -->
+        <div id="batch-context" class="card mb-24 hidden">
+          <div class="card-header"><h3>📋 Batch Summary</h3></div>
+          <div class="card-body">
+            <div style="display:flex; gap:20px; flex-wrap:wrap">
+              <div><div style="font-family:var(--font-display);font-size:1.3rem;font-weight:700" id="ctx-eggs">—</div><div style="font-size:0.7rem;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.06em">Eggs Set</div></div>
+              <div><div style="font-family:var(--font-display);font-size:1.3rem;font-weight:700;color:var(--green-mid)" id="ctx-fertile">—</div><div style="font-size:0.7rem;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.06em">Fertile (Candled)</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Entry Counters -->
+        <div class="card mb-24">
+          <div class="card-header"><h3>Hatch Counts</h3></div>
+          <div class="card-body">
+            <div class="results-grid">
+              <div class="result-counter">
+                <div class="result-counter-icon">🐥</div>
+                <div class="result-counter-label">Chicks Hatched</div>
+                <input type="number" class="result-counter-input" id="hatched" value="0" min="0" oninput="recalculate()"/>
+                <div class="result-counter-sub">Healthy chicks</div>
+              </div>
+              <div class="result-counter">
+                <div class="result-counter-icon">⚠️</div>
+                <div class="result-counter-label">Cull Chicks</div>
+                <input type="number" class="result-counter-input" id="cull-chicks" value="0" min="0" oninput="recalculate()"/>
+                <div class="result-counter-sub">Weak / deformed</div>
+              </div>
+              <div class="result-counter">
+                <div class="result-counter-icon">💥</div>
+                <div class="result-counter-label">Exploders</div>
+                <input type="number" class="result-counter-input" id="exploders" value="0" min="0" oninput="recalculate()"/>
+                <div class="result-counter-sub">Burst / contaminated</div>
+              </div>
+              <div class="result-counter">
+                <div class="result-counter-icon">🥚</div>
+                <div class="result-counter-label">Unhatched</div>
+                <input type="number" class="result-counter-input" id="unhatched" value="0" min="0" oninput="recalculate()"/>
+                <div class="result-counter-sub">Full-term, not hatched</div>
+              </div>
+            </div>
+
+            <!-- Weight at hatch -->
+            <div class="form-group">
+              <label class="form-label">Average Egg Weight at Hatch (grams, optional)</label>
+              <input type="number" class="form-input" id="weight-end" placeholder="e.g. 50" step="0.1" oninput="recalculate()"/>
+              <span class="form-hint">Used to calculate % weight loss. Ideal range: 11–13% over 18 days.</span>
+            </div>
+
+            <!-- Cost per chick -->
+            <div class="form-group">
+              <label class="form-label">Total Batch Cost (₦, optional)</label>
+              <input type="number" class="form-input" id="batch-cost" placeholder="e.g. 150000" oninput="recalculate()"/>
+              <span class="form-hint">Used to calculate cost per chick.</span>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Hatch Notes</label>
+              <textarea class="form-textarea" id="hatch-notes" style="min-height:80px" placeholder="Any observations — hatch duration, assisted hatches, power outages…"></textarea>
+            </div>
+
+            <button class="btn btn-green btn-full btn-lg" onclick="submitResults()" id="submit-btn">
+              💾 Save Hatch Results
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Metrics Panel -->
+      <div>
+        <div class="card" style="position:sticky;top:80px">
+          <div class="card-header"><h3>📊 Live Metrics</h3></div>
+          <div class="card-body">
+            <div class="live-metric">
+              <span class="live-metric-label">Fertility %</span>
+              <span class="live-metric-value" id="lm-fertility">—</span>
+            </div>
+            <div class="live-metric">
+              <span class="live-metric-label">Total Hatch %</span>
+              <span class="live-metric-value" id="lm-total-hatch">—</span>
+            </div>
+            <div class="live-metric">
+              <span class="live-metric-label">Hatch of Fertile %</span>
+              <span class="live-metric-value" id="lm-hof">—</span>
+            </div>
+            <div class="live-metric">
+              <span class="live-metric-label">Viable Chicks</span>
+              <span class="live-metric-value" id="lm-viable">—</span>
+            </div>
+            <div class="live-metric">
+              <span class="live-metric-label">Cull Rate %</span>
+              <span class="live-metric-value" id="lm-cull">—</span>
+            </div>
+            <div class="live-metric">
+              <span class="live-metric-label">Exploder Rate %</span>
+              <span class="live-metric-value" id="lm-exploder">—</span>
+            </div>
+            <div class="live-metric" id="lm-weightloss-row" style="display:none">
+              <span class="live-metric-label">Weight Loss %</span>
+              <span class="live-metric-value" id="lm-weightloss">—</span>
+            </div>
+            <div class="live-metric" id="lm-cost-row" style="display:none">
+              <span class="live-metric-label">Cost / Chick</span>
+              <span class="live-metric-value" id="lm-cost">—</span>
+            </div>
+          </div>
+
+          <div class="card-footer" style="flex-direction:column; align-items:stretch; gap:8px">
+            <div id="interpretation-list" class="interpretation-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  if (preselectedId) {
+    setTimeout(() => onBatchChange(preselectedId), 100);
+  }
+}
+
+function onBatchChange(batchId) {
+  const sel = document.getElementById('batch-select');
+  const opt = sel.querySelector(`option[value="${batchId}"]`);
+  if (!opt) return;
+
+  window._eggs    = parseInt(opt.dataset.eggs)   || 0;
+  window._fertile = parseInt(opt.dataset.fertile) || 0;
+  window._weightStart = parseFloat(opt.dataset.weight) || null;
+
+  document.getElementById('batch-context').classList.remove('hidden');
+  document.getElementById('ctx-eggs').textContent   = window._eggs.toLocaleString();
+  document.getElementById('ctx-fertile').textContent = window._fertile ? window._fertile.toLocaleString() : 'Not candled';
+
+  recalculate();
+}
+
+function recalculate() {
+  const eggs      = window._eggs    || 0;
+  const fertile   = window._fertile || 0;
+  const hatched   = parseInt(document.getElementById('hatched').value)     || 0;
+  const culls     = parseInt(document.getElementById('cull-chicks').value) || 0;
+  const exploders = parseInt(document.getElementById('exploders').value)   || 0;
+  const weightEnd = parseFloat(document.getElementById('weight-end').value) || null;
+  const cost      = parseFloat(document.getElementById('batch-cost').value) || null;
+  const weightStart = window._weightStart;
+
+  const metrics = Analytics.calculate({
+    eggs_set: eggs, fertile, hatched,
+    early_dead: 0, late_dead: 0,
+    exploders, cull_chicks: culls,
+    egg_weight_start: weightStart,
+    egg_weight_end: weightEnd,
+  });
+
+  function setMetric(id, value, thresholds) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (value === null || value === undefined || isNaN(value) || eggs === 0) { el.textContent = '—'; el.className = 'live-metric-value'; return; }
+    el.textContent = value + '%';
+    if (thresholds) {
+      el.className = 'live-metric-value ' + (value >= thresholds.good ? 'good' : value >= thresholds.warn ? 'warn' : 'bad');
+    }
+  }
+
+  setMetric('lm-fertility',   metrics.fertility_pct,        { good: 85, warn: 70 });
+  setMetric('lm-total-hatch', metrics.total_hatch_pct,      { good: 80, warn: 65 });
+  setMetric('lm-hof',         metrics.hatch_of_fertile_pct, { good: 88, warn: 75 });
+  setMetric('lm-cull',        metrics.cull_pct,             { good: 100, warn: 95 }); // inverse
+  setMetric('lm-exploder',    metrics.exploder_pct,         { good: 100, warn: 98 }); // inverse
+
+  const viableEl = document.getElementById('lm-viable');
+  if (eggs > 0) { viableEl.textContent = (hatched - culls).toLocaleString(); viableEl.className = 'live-metric-value good'; }
+  else viableEl.textContent = '—';
+
+  // Weight loss
+  if (metrics.weight_loss_pct !== null) {
+    document.getElementById('lm-weightloss-row').style.display = 'flex';
+    const wlEl = document.getElementById('lm-weightloss');
+    wlEl.textContent = metrics.weight_loss_pct + '%';
+    wlEl.className = 'live-metric-value ' + (metrics.weight_loss_pct >= 11 && metrics.weight_loss_pct <= 13 ? 'good' : 'warn');
+  } else {
+    document.getElementById('lm-weightloss-row').style.display = 'none';
+  }
+
+  // Cost per chick
+  const viableChicks = hatched - culls;
+  if (cost && viableChicks > 0) {
+    document.getElementById('lm-cost-row').style.display = 'flex';
+    document.getElementById('lm-cost').textContent = '₦' + Math.round(cost / viableChicks).toLocaleString();
+  } else {
+    document.getElementById('lm-cost-row').style.display = 'none';
+  }
+
+  // Interpretation
+  if (eggs > 0 && hatched > 0) {
+    const { issues, good } = Analytics.interpret(metrics);
+    const list = document.getElementById('interpretation-list');
+    list.innerHTML = [
+      ...good.map(g   => `<div class="alert alert-green" style="padding:8px 12px"><span class="alert-icon">✓</span><div class="alert-text" style="font-size:0.78rem"><strong>${g.text}</strong></div></div>`),
+      ...issues.map(i => `<div class="alert alert-${i.sev === 'critical' ? 'red' : 'amber'}" style="padding:8px 12px"><span class="alert-icon">${i.sev === 'critical' ? '⚠' : '!'}</span><div class="alert-text" style="font-size:0.78rem"><strong>${i.text}</strong> ${i.detail}</div></div>`),
+    ].join('');
+  }
+}
+
+async function submitResults() {
+  const batchId   = document.getElementById('batch-select').value;
+  const hatched   = parseInt(document.getElementById('hatched').value)     || 0;
+  const culls     = parseInt(document.getElementById('cull-chicks').value) || 0;
+  const exploders = parseInt(document.getElementById('exploders').value)   || 0;
+  const unhatched = parseInt(document.getElementById('unhatched').value)   || 0;
+  const weightEnd = parseFloat(document.getElementById('weight-end').value) || null;
+  const cost      = parseFloat(document.getElementById('batch-cost').value) || null;
+  const notes     = document.getElementById('hatch-notes').value.trim();
+
+  if (!batchId) { toast('Please select a batch.', 'error'); return; }
+
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Saving…';
+
+  const { error: insertError } = await db.from('hatch_records').upsert({
+    batch_id:     batchId,
+    user_id:      currentUserId,
+    hatched,
+    cull_chicks:  culls,
+    exploders,
+    unhatched,
+    egg_weight_end: weightEnd,
+    batch_cost:   cost,
+    notes:        notes || null,
+  }, { onConflict: 'batch_id' });
+
+  if (insertError) {
+    toast('Failed to save: ' + insertError.message, 'error');
+    btn.disabled = false;
+    btn.innerHTML = '💾 Save Hatch Results';
+    return;
+  }
+
+  // Mark batch completed
+  await db.from('batches').update({
+    status: 'completed',
+    completed_at: new Date().toISOString(),
+  }).eq('id', batchId);
+
+  toast('Hatch results saved!', 'success');
+  setTimeout(() => window.location.href = `analytics.html?id=${batchId}`, 900);
+}
+</script>
+</body>
+</html>
