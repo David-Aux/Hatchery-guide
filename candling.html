@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Candling Entry — Hatchery Guide</title>
+  <link rel="stylesheet" href="styles.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    .candle-hero {
+      background: linear-gradient(135deg, #1C1410 0%, #3D2B1F 100%);
+      border-radius: var(--radius-xl);
+      padding: 28px 32px;
+      color: #fff;
+      margin-bottom: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+    .candle-hero::after {
+      content: '🕯️';
+      position: absolute; right: 24px; top: 50%;
+      transform: translateY(-50%);
+      font-size: 5rem; opacity: 0.15;
+    }
+    .candle-hero h2 { color: #fff; margin-bottom: 4px; }
+    .candle-hero p  { color: rgba(255,255,255,0.55); font-size: 0.88rem; }
+
+    .egg-counter {
+      background: #fff;
+      border-radius: var(--radius-xl);
+      border: 1.5px solid var(--parchment);
+      padding: 24px;
+      text-align: center;
+    }
+
+    .egg-counter-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--ink-faint);
+      margin-bottom: 8px;
+    }
+
+    .egg-counter-value {
+      font-family: var(--font-display);
+      font-size: 2.4rem;
+      font-weight: 700;
+      color: var(--ink);
+      line-height: 1;
+    }
+
+    .egg-counter-sub {
+      font-size: 0.75rem;
+      color: var(--ink-faint);
+      margin-top: 4px;
+    }
+
+    .counter-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .input-large {
+      text-align: center;
+      font-family: var(--font-display);
+      font-size: 1.8rem;
+      font-weight: 700;
+      padding: 16px;
+      color: var(--ink);
+    }
+
+    .candle-guide-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--cream-dark);
+    }
+    .candle-guide-item:last-child { border-bottom: none; }
+    .candle-guide-icon { font-size: 1.4rem; flex-shrink: 0; }
+    .candle-guide-text strong { display: block; font-size: 0.88rem; color: var(--ink); margin-bottom: 2px; }
+    .candle-guide-text p { font-size: 0.8rem; color: var(--ink-faint); margin: 0; }
+
+    .fertile-calc {
+      background: var(--green-light);
+      border: 1.5px solid var(--green-mid);
+      border-radius: var(--radius-md);
+      padding: 16px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .fertile-calc-label { font-size: 0.85rem; font-weight: 600; color: var(--green-dark); }
+    .fertile-calc-value {
+      font-family: var(--font-display);
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: var(--green);
+    }
+
+    .day-selector {
+      display: flex; gap: 8px;
+    }
+
+    .day-btn {
+      flex: 1;
+      padding: 14px;
+      border: 2px solid var(--parchment);
+      border-radius: var(--radius-md);
+      background: #fff;
+      font-family: var(--font-body);
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--ink-light);
+      cursor: pointer;
+      transition: all 0.18s;
+      text-align: center;
+    }
+
+    .day-btn:hover { border-color: var(--amber); color: var(--ink); }
+    .day-btn.active { border-color: var(--amber); background: var(--amber-pale); color: var(--amber-dark); }
+  </style>
+</head>
+<body>
+<script src="app.js"></script>
+<script src="shell.js"></script>
+<script>
+let currentBatch  = null;
+let selectedDay   = 7;
+let currentUserId = null;
+
+(async () => {
+  const ctx = await initShell({ page: 'candling', title: 'Candling Entry' });
+  if (!ctx) return;
+  currentUserId = ctx.user.id;
+
+  const params  = new URLSearchParams(window.location.search);
+  const batchId = params.get('id');
+  const dayParam = parseInt(params.get('day')) || null;
+
+  // Load batches for selector
+  const { data: batches } = await db
+    .from('batches')
+    .select('id, batch_name, eggs_set, start_date, status')
+    .eq('user_id', ctx.user.id)
+    .eq('status', 'active')
+    .order('created_at', { ascending: false });
+
+  renderPage(batches || [], batchId, dayParam);
+})();
+
+function renderPage(batches, preselectedId, preselectedDay) {
+  const pb = document.getElementById('page-body');
+
+  pb.innerHTML = `
+    <div class="page-header">
+      <h1>🕯️ Candling Entry</h1>
+      <p>Record candling observations for Day 7 or Day 14.</p>
+    </div>
+
+    <!-- Hero -->
+    <div class="candle-hero">
+      <h2>Egg Candling</h2>
+      <p>Candling reveals fertility and embryo development without breaking the egg. Use a bright LED torch in a dark room.</p>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 320px; gap:24px; align-items:start">
+      <div>
+        <!-- Batch Selector -->
+        <div class="card mb-24">
+          <div class="card-header"><h3>Select Batch</h3></div>
+          <div class="card-body">
+            ${batches.length === 0 ? `
+              <div class="empty-state" style="padding:20px">
+                <p>No active batches found.</p>
+                <a href="new-batch.html" class="btn btn-primary mt-16">Start a Batch</a>
+              </div>` : `
+              <div class="form-group">
+                <label class="form-label">Active Batch <span class="required">*</span></label>
+                <select class="form-select" id="batch-select" onchange="onBatchSelect(this.value)">
+                  <option value="">— Select a batch —</option>
+                  ${batches.map(b => `
+                    <option value="${b.id}" data-eggs="${b.eggs_set}" data-start="${b.start_date}"
+                      ${b.id === preselectedId ? 'selected' : ''}>
+                      ${b.batch_name} (${b.eggs_set} eggs · Day ${incubationDay(b.start_date)})
+                    </option>`).join('')}
+                </select>
+              </div>`}
+          </div>
+        </div>
+
+        <!-- Day Selector -->
+        <div class="card mb-24">
+          <div class="card-header"><h3>Candling Day</h3></div>
+          <div class="card-body">
+            <div class="day-selector">
+              <button class="day-btn ${!preselectedDay || preselectedDay === 7 ? 'active' : ''}" onclick="selectDay(7, this)" id="day7-btn">
+                🕯️ Day 7<br/>
+                <span style="font-size:0.72rem; font-weight:400; color:inherit">First candle</span>
+              </button>
+              <button class="day-btn ${preselectedDay === 14 ? 'active' : ''}" onclick="selectDay(14, this)" id="day14-btn">
+                🕯️ Day 14<br/>
+                <span style="font-size:0.72rem; font-weight:400; color:inherit">Second candle</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Entry Form -->
+        <div class="card mb-24">
+          <div class="card-header">
+            <h3>Observations</h3>
+            <span class="badge badge-amber" id="day-badge">Day ${preselectedDay || 7}</span>
+          </div>
+          <div class="card-body">
+            <div id="batch-summary" class="mb-16 hidden">
+              <div class="alert alert-amber">
+                <span class="alert-icon">📊</span>
+                <div class="alert-text" id="batch-summary-text"></div>
+              </div>
+            </div>
+
+            <div class="counter-grid">
+              <div class="egg-counter">
+                <div class="egg-counter-label">🚫 Infertile / Clear</div>
+                <input type="number" class="form-input input-large" id="infertile" value="0" min="0" oninput="recalculate()"/>
+                <div class="egg-counter-sub">No development visible</div>
+              </div>
+              <div class="egg-counter">
+                <div class="egg-counter-label">💀 Early Dead</div>
+                <input type="number" class="form-input input-large" id="early-dead" value="0" min="0" oninput="recalculate()"/>
+                <div class="egg-counter-sub">Blood ring / dark mass</div>
+              </div>
+              <div class="egg-counter" id="late-dead-wrap">
+                <div class="egg-counter-label">☠️ Late Dead</div>
+                <input type="number" class="form-input input-large" id="late-dead" value="0" min="0" oninput="recalculate()"/>
+                <div class="egg-counter-sub">Day 14+ unresponsive</div>
+              </div>
+            </div>
+
+            <!-- Fertile calculation -->
+            <div class="fertile-calc mb-24" id="fertile-calc">
+              <div>
+                <div class="fertile-calc-label">Estimated Fertile Eggs Remaining</div>
+                <div style="font-size:0.75rem; color:var(--green-dark); margin-top:2px">Eggs Set − Infertile − Early Dead − Late Dead</div>
+              </div>
+              <div class="fertile-calc-value" id="fertile-display">—</div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Egg Weight at Candling (grams, optional)</label>
+              <input type="number" class="form-input" id="candle-weight" placeholder="e.g. 52" min="1" step="0.1"/>
+              <span class="form-hint">Used to calculate % weight loss (optimal: 11–13% by Day 18).</span>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Observations / Notes</label>
+              <textarea class="form-textarea" id="candle-notes" style="min-height:80px" placeholder="e.g. Veining visible in most, 3 exploders removed…"></textarea>
+            </div>
+
+            <div id="existing-warning" class="alert alert-amber mb-16 hidden">
+              <span class="alert-icon">⚠️</span>
+              <div class="alert-text"><strong>Record already exists</strong> A candling record for this day already exists. Submitting will overwrite it.</div>
+            </div>
+
+            <button class="btn btn-primary btn-full btn-lg" onclick="submitCandling()" id="submit-btn">
+              Save Candling Record
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Guide -->
+      <div>
+        <div class="card">
+          <div class="card-header"><h3>📖 What to Look For</h3></div>
+          <div class="card-body-flush">
+            <div style="padding:16px 20px">
+              <div class="candle-guide-item">
+                <div class="candle-guide-icon">✅</div>
+                <div class="candle-guide-text">
+                  <strong>Fertile (Developing)</strong>
+                  <p>Visible veining (spider-web pattern). Dark shadow with movement. Air cell visible at large end.</p>
+                </div>
+              </div>
+              <div class="candle-guide-item">
+                <div class="candle-guide-icon">⚪</div>
+                <div class="candle-guide-text">
+                  <strong>Infertile / Clear</strong>
+                  <p>Glows uniformly — yolk shadow visible but no veins, no embryo. Remove promptly.</p>
+                </div>
+              </div>
+              <div class="candle-guide-item">
+                <div class="candle-guide-icon">🔴</div>
+                <div class="candle-guide-text">
+                  <strong>Early Dead (Blood Ring)</strong>
+                  <p>Red ring visible inside. Development started but stopped. Common Day 1–7.</p>
+                </div>
+              </div>
+              <div class="candle-guide-item">
+                <div class="candle-guide-icon">🌑</div>
+                <div class="candle-guide-text">
+                  <strong>Late Dead</strong>
+                  <p>Dark, no movement. No peeping. Air cell may be off-center. Remove carefully.</p>
+                </div>
+              </div>
+              <div class="candle-guide-item">
+                <div class="candle-guide-icon">💥</div>
+                <div class="candle-guide-text">
+                  <strong>Exploder Risk</strong>
+                  <p>Leaking, dark liquid, foul smell, or bulging shell. REMOVE IMMEDIATELY to avoid contaminating others.</p>
+                </div>
+              </div>
+            </div>
+
+            <div style="padding:0 20px 20px">
+              <div class="alert alert-green">
+                <span class="alert-icon">💡</span>
+                <div class="alert-text">
+                  <strong>Optimal candle room</strong>
+                  Candle in a darkened room. Hold torch at large end. Work quickly — 5 to 10 seconds per egg.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  selectedDay = preselectedDay || 7;
+
+  if (preselectedId) {
+    setTimeout(() => {
+      document.getElementById('batch-select')?.dispatchEvent(new Event('change'));
+      onBatchSelect(preselectedId);
+    }, 100);
+  }
+}
+
+function selectDay(day, btn) {
+  selectedDay = day;
+  document.querySelectorAll('.day-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('day-badge').textContent = `Day ${day}`;
+  document.getElementById('late-dead-wrap').style.opacity = day === 14 ? '1' : '0.5';
+  checkExistingRecord();
+}
+
+async function onBatchSelect(batchId) {
+  if (!batchId) return;
+
+  const sel = document.getElementById('batch-select');
+  const opt = sel.querySelector(`option[value="${batchId}"]`);
+  if (!opt) return;
+
+  const eggsSet = parseInt(opt.dataset.eggs) || 0;
+  document.getElementById('batch-summary').classList.remove('hidden');
+  document.getElementById('batch-summary-text').innerHTML =
+    `<strong>${opt.textContent.split('(')[0].trim()}</strong> — ${eggsSet.toLocaleString()} eggs set`;
+
+  window._selectedEggsSet = eggsSet;
+  recalculate();
+  await checkExistingRecord();
+}
+
+async function checkExistingRecord() {
+  const batchId = document.getElementById('batch-select')?.value;
+  if (!batchId) return;
+
+  const { data } = await db
+    .from('candling_records')
+    .select('id')
+    .eq('batch_id', batchId)
+    .eq('day_number', selectedDay)
+    .single();
+
+  document.getElementById('existing-warning').classList.toggle('hidden', !data);
+}
+
+function recalculate() {
+  const eggsSet  = window._selectedEggsSet || 0;
+  const infert   = parseInt(document.getElementById('infertile').value)  || 0;
+  const earlyD   = parseInt(document.getElementById('early-dead').value) || 0;
+  const lateD    = parseInt(document.getElementById('late-dead').value)  || 0;
+  const fertile  = Math.max(0, eggsSet - infert - earlyD - lateD);
+
+  document.getElementById('fertile-display').textContent = eggsSet > 0 ? fertile : '—';
+}
+
+async function submitCandling() {
+  const batchId   = document.getElementById('batch-select')?.value;
+  const infertile = parseInt(document.getElementById('infertile').value)  || 0;
+  const earlyDead = parseInt(document.getElementById('early-dead').value) || 0;
+  const lateDead  = parseInt(document.getElementById('late-dead').value)  || 0;
+  const weight    = parseFloat(document.getElementById('candle-weight').value) || null;
+  const notes     = document.getElementById('candle-notes').value.trim();
+  const eggsSet   = window._selectedEggsSet || 0;
+  const fertile   = Math.max(0, eggsSet - infertile - earlyDead - lateDead);
+
+  if (!batchId) { toast('Please select a batch.', 'error'); return; }
+
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Saving…';
+
+  // Upsert (overwrite if exists)
+  const { error } = await db.from('candling_records').upsert({
+    batch_id:    batchId,
+    user_id:     currentUserId,
+    day_number:  selectedDay,
+    infertile,
+    early_dead:  earlyDead,
+    late_dead:   lateDead,
+    fertile,
+    egg_weight:  weight,
+    notes:       notes || null,
+  }, { onConflict: 'batch_id,day_number' });
+
+  if (error) {
+    toast('Failed to save: ' + error.message, 'error');
+    btn.disabled = false;
+    btn.innerHTML = 'Save Candling Record';
+    return;
+  }
+
+  // Update batch with latest fertile count
+  await db.from('batches').update({ fertile_count: fertile }).eq('id', batchId);
+
+  toast('Candling record saved!', 'success');
+  setTimeout(() => window.location.href = `batch-detail.html?id=${batchId}`, 800);
+}
+</script>
+</body>
+</html>
