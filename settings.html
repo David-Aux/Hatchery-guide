@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Settings — Hatchery Guide</title>
+  <link rel="stylesheet" href="styles.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    .settings-section {
+      background: #fff;
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--parchment);
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+
+    .settings-section-header {
+      padding: 20px 28px;
+      border-bottom: 1px solid var(--cream-dark);
+      background: var(--cream);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .settings-section-header h3 { font-size: 1rem; }
+    .settings-section-body { padding: 24px 28px; }
+
+    .incubator-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--cream-dark);
+    }
+    .incubator-item:last-child { border-bottom: none; }
+    .inc-icon { font-size: 1.4rem; }
+    .inc-info { flex: 1; min-width: 0; }
+    .inc-name { font-size: 0.9rem; font-weight: 600; color: var(--ink); }
+    .inc-meta { font-size: 0.75rem; color: var(--ink-faint); margin-top: 1px; }
+    .inc-actions { display: flex; gap: 6px; }
+  </style>
+</head>
+<body>
+<script src="app.js"></script>
+<script src="shell.js"></script>
+<script>
+let currentUser = null;
+let currentProfile = null;
+let incubators  = [];
+
+(async () => {
+  const ctx = await initShell({ page: 'settings', title: 'Settings' });
+  if (!ctx) return;
+  currentUser    = ctx.user;
+  currentProfile = ctx.profile;
+
+  renderSettingsPage();
+  await loadIncubators();
+})();
+
+function renderSettingsPage() {
+  const pb = document.getElementById('page-body');
+  const p  = currentProfile;
+
+  pb.innerHTML = `
+    <div class="page-header">
+      <h1>⚙️ Settings</h1>
+      <p>Manage your hatchery profile and incubators.</p>
+    </div>
+
+    <!-- Profile -->
+    <div class="settings-section">
+      <div class="settings-section-header">
+        <h3>👤 Hatchery Profile</h3>
+      </div>
+      <div class="settings-section-body">
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Full Name</label>
+            <input type="text" class="form-input" id="p-name" value="${p?.full_name || ''}"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Hatchery Name</label>
+            <input type="text" class="form-input" id="p-hatchery" value="${p?.hatchery_name || ''}"/>
+          </div>
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Location (State)</label>
+            <input type="text" class="form-input" id="p-location" value="${p?.location || ''}" placeholder="e.g. Ogun, Lagos, Kano"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Phone</label>
+            <input type="tel" class="form-input" id="p-phone" value="${p?.phone || ''}" placeholder="+234…"/>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input type="email" class="form-input" value="${currentUser?.email || ''}" disabled/>
+          <span class="form-hint">Email cannot be changed here.</span>
+        </div>
+        <button class="btn btn-primary" onclick="saveProfile()">Save Profile</button>
+      </div>
+    </div>
+
+    <!-- Incubators -->
+    <div class="settings-section">
+      <div class="settings-section-header">
+        <h3>🖥️ Incubators / Machines</h3>
+        <button class="btn btn-primary btn-sm" onclick="openAddIncubator()">+ Add Machine</button>
+      </div>
+      <div class="settings-section-body" id="incubators-list">
+        <div class="empty-state" style="padding:20px">
+          <span class="spinner"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- App Info -->
+    <div class="settings-section">
+      <div class="settings-section-header">
+        <h3>ℹ️ About Hatchery Guide</h3>
+      </div>
+      <div class="settings-section-body">
+        <div style="display:grid; gap:12px">
+          ${[
+            ['Version',   'V1.0 — Foundation'],
+            ['Platform',  'Web Application'],
+            ['Analytics', 'Fertility, Hatch Rate, Embryo Mortality, Weight Loss'],
+            ['Spec',      '21-day broiler/layer chicken incubation'],
+            ['Roadmap',   'IoT sensor integration, AI optimization, CO₂ monitoring'],
+          ].map(([k,v]) => `
+            <div class="flex justify-between items-center" style="padding:8px 0; border-bottom:1px solid var(--cream-dark); gap:8px; flex-wrap:wrap">
+              <span style="font-size:0.82rem; color:var(--ink-faint); font-weight:600">${k}</span>
+              <span style="font-size:0.85rem; color:var(--ink)">${v}</span>
+            </div>`).join('')}
+        </div>
+      </div>
+    </div>
+
+    <!-- Danger Zone -->
+    <div class="settings-section" style="border-color:var(--red-alert)">
+      <div class="settings-section-header" style="background:var(--red-pale)">
+        <h3 style="color:var(--red-alert)">⚠️ Danger Zone</h3>
+      </div>
+      <div class="settings-section-body">
+        <p style="margin-bottom:16px; font-size:0.88rem">Permanently delete your account and all data. This cannot be undone.</p>
+        <button class="btn btn-danger btn-sm" onclick="confirmDeleteAccount()">Delete Account</button>
+      </div>
+    </div>
+  `;
+
+  // Add incubator modal
+  document.body.insertAdjacentHTML('beforeend', `
+    <div class="modal-overlay hidden" id="incubator-modal">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>Add Incubator</h3>
+          <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Machine Name <span class="required">*</span></label>
+            <input type="text" class="form-input" id="inc-name" placeholder="e.g. Setter A, Main Hatcher"/>
+          </div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Type</label>
+              <select class="form-select" id="inc-type">
+                <option value="setter">Setter</option>
+                <option value="hatcher">Hatcher</option>
+                <option value="combined">Combined (Setter & Hatcher)</option>
+                <option value="custom">Custom</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Capacity (eggs)</label>
+              <input type="number" class="form-input" id="inc-cap" placeholder="e.g. 528" min="1"/>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Brand / Model</label>
+            <input type="text" class="form-input" id="inc-brand" placeholder="e.g. Custom-built, Rcom, Brinsea"/>
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label">Air Circulation</label>
+            <select class="form-select" id="inc-air">
+              <option value="forced_air">Forced Air (Fan)</option>
+              <option value="still_air">Still Air</option>
+            </select>
+          </div>
+          <div class="flex gap-12 mt-16" style="justify-content:flex-end">
+            <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="saveIncubator()">Add Machine</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `);
+}
+
+async function loadIncubators() {
+  const { data } = await db
+    .from('incubators')
+    .select('*')
+    .eq('user_id', currentUser.id)
+    .order('created_at');
+
+  incubators = data || [];
+  renderIncubatorList();
+}
+
+function renderIncubatorList() {
+  const container = document.getElementById('incubators-list');
+  if (!container) return;
+
+  if (incubators.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state" style="padding:24px">
+        <div class="empty-icon" style="font-size:2rem">🖥️</div>
+        <p style="font-size:0.88rem">No machines added yet. Add your incubators to track which machine each batch runs in.</p>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = incubators.map(m => `
+    <div class="incubator-item">
+      <div class="inc-icon">🖥️</div>
+      <div class="inc-info">
+        <div class="inc-name">${m.name}</div>
+        <div class="inc-meta">
+          ${m.type ? m.type.charAt(0).toUpperCase() + m.type.slice(1) : 'Machine'} ·
+          ${m.capacity ? m.capacity + ' eggs' : 'Capacity not set'} ·
+          ${m.brand || 'No brand'} ·
+          ${m.air_type === 'forced_air' ? 'Forced Air' : 'Still Air'}
+        </div>
+      </div>
+      <div class="inc-actions">
+        <button class="btn btn-danger btn-sm" onclick="deleteIncubator('${m.id}')">Remove</button>
+      </div>
+    </div>`).join('');
+}
+
+function openAddIncubator() {
+  document.getElementById('incubator-modal').classList.remove('hidden');
+}
+
+function closeModal() {
+  document.getElementById('incubator-modal').classList.add('hidden');
+}
+
+async function saveIncubator() {
+  const name     = document.getElementById('inc-name').value.trim();
+  const type     = document.getElementById('inc-type').value;
+  const capacity = parseInt(document.getElementById('inc-cap').value) || null;
+  const brand    = document.getElementById('inc-brand').value.trim();
+  const airType  = document.getElementById('inc-air').value;
+
+  if (!name) { toast('Please enter a machine name.', 'error'); return; }
+
+  const { error } = await db.from('incubators').insert({
+    user_id:  currentUser.id,
+    name,
+    type,
+    capacity,
+    brand:    brand || null,
+    air_type: airType,
+  });
+
+  if (error) { toast('Failed to add: ' + error.message, 'error'); return; }
+
+  toast('Machine added!', 'success');
+  closeModal();
+  await loadIncubators();
+}
+
+async function deleteIncubator(id) {
+  if (!confirm('Remove this machine?')) return;
+  const { error } = await db.from('incubators').delete().eq('id', id).eq('user_id', currentUser.id);
+  if (error) { toast('Failed to remove', 'error'); return; }
+  toast('Machine removed', 'success');
+  await loadIncubators();
+}
+
+async function saveProfile() {
+  const name     = document.getElementById('p-name').value.trim();
+  const hatchery = document.getElementById('p-hatchery').value.trim();
+  const location = document.getElementById('p-location').value.trim();
+  const phone    = document.getElementById('p-phone').value.trim();
+
+  const { error } = await db.from('profiles').upsert({
+    id: currentUser.id,
+    full_name:     name    || null,
+    hatchery_name: hatchery || null,
+    location:      location || null,
+    phone:         phone    || null,
+    email:         currentUser.email,
+  });
+
+  if (error) { toast('Failed to save profile', 'error'); return; }
+  toast('Profile saved!', 'success');
+
+  // Update sidebar
+  document.getElementById('user-name').textContent = hatchery || name || 'User';
+  if (name) document.getElementById('user-avatar').textContent = getInitials(name);
+}
+
+function confirmDeleteAccount() {
+  toast('Contact support to delete your account.', 'warning', 5000);
+}
+</script>
+</body>
+</html>
