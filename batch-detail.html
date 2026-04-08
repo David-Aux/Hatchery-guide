@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Batch Detail — Hatchery Guide</title>
+  <link rel="stylesheet" href="styles.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    .batch-hero {
+      background: linear-gradient(135deg, var(--green-dark), var(--green));
+      border-radius: var(--radius-xl);
+      padding: 28px 32px;
+      color: #fff;
+      margin-bottom: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .batch-hero::after {
+      content: attr(data-day);
+      position: absolute;
+      right: 24px; top: 50%;
+      transform: translateY(-50%);
+      font-family: var(--font-display);
+      font-size: 6rem;
+      font-weight: 700;
+      color: rgba(255,255,255,0.07);
+      pointer-events: none;
+      line-height: 1;
+    }
+
+    .batch-hero-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .batch-hero h2 {
+      color: #fff;
+      font-size: 1.6rem;
+      margin-bottom: 4px;
+    }
+
+    .batch-hero-meta {
+      font-size: 0.82rem;
+      color: rgba(255,255,255,0.55);
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .batch-hero-stats {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+
+    .bhs-item { display: flex; flex-direction: column; gap: 2px; }
+    .bhs-value {
+      font-family: var(--font-display);
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--amber-light);
+      line-height: 1;
+    }
+    .bhs-label {
+      font-size: 0.68rem;
+      color: rgba(255,255,255,0.45);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    /* Day Timeline */
+    .timeline-card { margin-bottom: 24px; }
+    .timeline-legend {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.72rem;
+      color: var(--ink-light);
+      font-weight: 500;
+    }
+    .legend-dot {
+      width: 10px; height: 10px;
+      border-radius: 3px;
+    }
+
+    /* Today's Guidance */
+    .guidance-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+    }
+
+    .guidance-item {
+      background: var(--cream);
+      border: 1.5px solid var(--parchment);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+    }
+
+    .guidance-item-label {
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--ink-faint);
+      margin-bottom: 4px;
+    }
+
+    .guidance-item-value {
+      font-family: var(--font-display);
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    .guidance-item-sub {
+      font-size: 0.72rem;
+      color: var(--ink-faint);
+      margin-top: 2px;
+    }
+
+    /* Log entries */
+    .log-entry {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--cream-dark);
+    }
+    .log-entry:last-child { border-bottom: none; }
+    .log-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--amber);
+      flex-shrink: 0;
+      margin-top: 5px;
+    }
+    .log-date { font-size: 0.75rem; color: var(--ink-faint); margin-bottom: 2px; }
+    .log-text { font-size: 0.88rem; color: var(--ink-mid); font-weight: 500; }
+
+    .action-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 24px;
+    }
+
+    @media (max-width: 600px) {
+      .batch-hero { padding: 20px; }
+      .batch-hero-stats { gap: 16px; }
+      .action-row .btn { flex: 1; justify-content: center; min-width: 120px; }
+    }
+  </style>
+</head>
+<body>
+<script src="app.js"></script>
+<script src="shell.js"></script>
+<script>
+let batchData = null;
+
+(async () => {
+  const ctx = await initShell({ page: 'batches', title: 'Batch Detail' });
+  if (!ctx) return;
+
+  const params  = new URLSearchParams(window.location.search);
+  const batchId = params.get('id');
+
+  if (!batchId) { toast('No batch ID provided.', 'error'); return; }
+
+  const { data: batch, error } = await db
+    .from('batches')
+    .select(`*, incubators(*), candling_records(*), hatch_records(*)`)
+    .eq('id', batchId)
+    .eq('user_id', ctx.user.id)
+    .single();
+
+  if (error || !batch) {
+    document.getElementById('page-body').innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">❌</div>
+        <h3>Batch not found</h3>
+        <p>This batch doesn't exist or you don't have access.</p>
+        <a href="dashboard.html" class="btn btn-primary mt-16">← Dashboard</a>
+      </div>`;
+    return;
+  }
+
+  batchData = batch;
+  renderBatchDetail(batch);
+})();
+
+function renderBatchDetail(batch) {
+  const pb   = document.getElementById('page-body');
+  const day  = incubationDay(batch.start_date);
+  const recs = Analytics.getDayRecommendations(day);
+  const stage = Analytics.getStage(day);
+  const hatchDt = hatchDate(batch.start_date);
+  const daysLeft = Math.max(0, daysUntil(hatchDt));
+
+  // Build day timeline HTML
+  let timelineHTML = '';
+  for (let d = 1; d <= 21; d++) {
+    let cls = '';
+    if (d < day)  cls = 'past';
+    if (d === day) cls = 'today';
+    if (d > day)  cls = 'future';
+    if (INCUBATION.CANDLE_DAYS.includes(d) && d !== day) cls += ' candle';
+    if (d >= 18 && d !== day) cls = 'lockdown';
+    if (d >= 18 && d === day) cls = 'today';
+    timelineHTML += `<div class="day-pip ${cls.trim()}" title="Day ${d}">${d}</div>`;
+  }
+
+  // Build candling summary
+  const candleRecords = batch.candling_records || [];
+  const latestCandle  = candleRecords.sort((a,b) => b.day_number - a.day_number)[0];
+
+  // Build hatch summary
+  const hatchRecord = batch.hatch_records?.[0];
+
+  // Action buttons
+  const actionButtons = [];
+  if (!candleRecords.find(r => r.day_number === 7) && day >= 7) {
+    actionButtons.push(`<a href="candling.html?id=${batch.id}&day=7" class="btn btn-ghost">🕯️ Enter Day 7 Candle</a>`);
+  }
+  if (!candleRecords.find(r => r.day_number === 14) && day >= 14) {
+    actionButtons.push(`<a href="candling.html?id=${batch.id}&day=14" class="btn btn-ghost">🕯️ Enter Day 14 Candle</a>`);
+  }
+  if (day >= 20 && !hatchRecord) {
+    actionButtons.push(`<a href="hatch-results.html?id=${batch.id}" class="btn btn-green">🐥 Enter Hatch Results</a>`);
+  }
+  if (hatchRecord) {
+    actionButtons.push(`<a href="analytics.html?id=${batch.id}" class="btn btn-primary">📊 View Analytics</a>`);
+  }
+
+  // Alert strip for today
+  let alertStrip = '';
+  if (INCUBATION.CANDLE_DAYS.includes(day)) {
+    alertStrip = `<div class="alert alert-amber mb-16"><span class="alert-icon">🕯️</span><div class="alert-text"><strong>Candling Day!</strong> Today is Day ${day} — candle your eggs and record results.</div></div>`;
+  }
+  if (day === 18) {
+    alertStrip = `<div class="alert alert-red mb-16"><span class="alert-icon">🔒</span><div class="alert-text"><strong>Lockdown Day!</strong> Stop turning eggs. Transfer to hatcher. Raise humidity to 70%+.</div></div>`;
+  }
+  if (day >= 20) {
+    alertStrip = `<div class="alert alert-green mb-16"><span class="alert-icon">🐥</span><div class="alert-text"><strong>Hatch Window!</strong> Chicks should begin hatching. Monitor closely. Don't open prematurely.</div></div>`;
+  }
+
+  pb.innerHTML = `
+    <!-- Breadcrumb -->
+    <div class="flex items-center gap-8 mb-16" style="font-size:0.82rem; color:var(--ink-faint)">
+      <a href="dashboard.html" style="color:var(--amber)">Dashboard</a>
+      <span>›</span>
+      <a href="batches.html" style="color:var(--amber)">Batches</a>
+      <span>›</span>
+      <span style="color:var(--ink)">${batch.batch_name}</span>
+    </div>
+
+    ${alertStrip}
+
+    <!-- Hero -->
+    <div class="batch-hero" data-day="D${day}">
+      <div class="batch-hero-top">
+        <div>
+          <h2>${batch.batch_name}</h2>
+          <div class="batch-hero-meta">
+            <span>🐔 ${batch.breed || 'Broiler/Layer'}</span>
+            ${batch.egg_source ? `<span>📍 ${batch.egg_source}</span>` : ''}
+            <span>📅 Started ${formatDate(batch.start_date)}</span>
+            ${batch.incubators?.name ? `<span>🖥️ ${batch.incubators.name}</span>` : ''}
+            <span class="badge badge-${stage?.key === 'HATCHING' ? 'green' : stage?.key === 'LOCKDOWN' ? 'red' : 'amber'}">${stage?.label || '—'}</span>
+          </div>
+        </div>
+        <div>
+          ${batch.status === 'active'
+            ? `<button class="btn btn-danger btn-sm" onclick="markComplete()">Mark Complete</button>`
+            : `<span class="badge badge-green">✓ Completed</span>`}
+        </div>
+      </div>
+
+      <div class="batch-hero-stats">
+        <div class="bhs-item">
+          <div class="bhs-value">${batch.eggs_set?.toLocaleString()}</div>
+          <div class="bhs-label">Eggs Set</div>
+        </div>
+        <div class="bhs-item">
+          <div class="bhs-value">Day ${day}</div>
+          <div class="bhs-label">Current Day</div>
+        </div>
+        <div class="bhs-item">
+          <div class="bhs-value">${daysLeft}</div>
+          <div class="bhs-label">Days to Hatch</div>
+        </div>
+        <div class="bhs-item">
+          <div class="bhs-value">${formatDate(hatchDt)}</div>
+          <div class="bhs-label">Expected Hatch</div>
+        </div>
+        ${latestCandle ? `
+        <div class="bhs-item">
+          <div class="bhs-value">${latestCandle.fertile ?? '—'}</div>
+          <div class="bhs-label">Fertile (Day ${latestCandle.day_number})</div>
+        </div>` : ''}
+        ${hatchRecord ? `
+        <div class="bhs-item">
+          <div class="bhs-value">${hatchRecord.hatched?.toLocaleString()}</div>
+          <div class="bhs-label">Hatched</div>
+        </div>` : ''}
+      </div>
+    </div>
+
+    <!-- Action Row -->
+    ${actionButtons.length ? `<div class="action-row">${actionButtons.join('')}</div>` : ''}
+
+    <!-- Main grid -->
+    <div style="display:grid; grid-template-columns: 1fr 340px; gap:24px; align-items:start">
+      <div>
+        <!-- Day Timeline -->
+        <div class="card timeline-card">
+          <div class="card-header">
+            <h3>📅 21-Day Incubation Timeline</h3>
+          </div>
+          <div class="card-body">
+            <div class="day-timeline">${timelineHTML}</div>
+            <div class="timeline-legend">
+              <div class="legend-item"><div class="legend-dot" style="background:var(--green-mid)"></div> Completed</div>
+              <div class="legend-item"><div class="legend-dot" style="background:var(--amber)"></div> Today (Day ${day})</div>
+              <div class="legend-item"><div class="legend-dot" style="background:var(--amber-pale);border:1px solid var(--amber)"></div> Candle Days</div>
+              <div class="legend-item"><div class="legend-dot" style="background:var(--red-pale);border:1px solid var(--red-alert)"></div> Lockdown</div>
+              <div class="legend-item"><div class="legend-dot" style="background:var(--cream-dark)"></div> Remaining</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Today's Guidance -->
+        <div class="card mb-24">
+          <div class="card-header">
+            <h3>🌡️ Day ${day} Guidance</h3>
+            <span class="badge badge-amber">${stage?.label}</span>
+          </div>
+          <div class="card-body">
+            <div class="guidance-grid">
+              <div class="guidance-item">
+                <div class="guidance-item-label">Temperature</div>
+                <div class="guidance-item-value">${recs.temp?.optimal}°C</div>
+                <div class="guidance-item-sub">Range: ${recs.temp?.min}–${recs.temp?.max}°C</div>
+              </div>
+              <div class="guidance-item">
+                <div class="guidance-item-label">Humidity</div>
+                <div class="guidance-item-value">${recs.humidity?.optimal}% RH</div>
+                <div class="guidance-item-sub">Range: ${recs.humidity?.min}–${recs.humidity?.max}%</div>
+              </div>
+              <div class="guidance-item">
+                <div class="guidance-item-label">Turning</div>
+                <div class="guidance-item-value">${recs.turning ? 'Active' : 'STOPPED'}</div>
+                <div class="guidance-item-sub">${recs.turning ? 'Every 4 hrs, 45°+ angle' : 'Day 18+: No turning'}</div>
+              </div>
+              <div class="guidance-item">
+                <div class="guidance-item-label">Ventilation</div>
+                <div class="guidance-item-value">${day <= 7 ? 'Minimal' : day <= 17 ? 'Moderate' : 'Maximum'}</div>
+                <div class="guidance-item-sub">${day >= 18 ? 'Fully open vents at lockdown' : 'Increase with embryo age'}</div>
+              </div>
+            </div>
+
+            ${recs.notes?.length ? `
+              <div class="mt-16">
+                ${recs.notes.map(n => `
+                  <div class="alert alert-amber" style="margin-bottom:8px">
+                    <span class="alert-icon">💡</span>
+                    <div class="alert-text">${n}</div>
+                  </div>`).join('')}
+              </div>` : ''}
+          </div>
+        </div>
+
+        <!-- Candling Records -->
+        <div class="card mb-24">
+          <div class="card-header">
+            <h3>🕯️ Candling Records</h3>
+            ${day >= 7 ? `<a href="candling.html?id=${batch.id}" class="btn btn-ghost btn-sm">Add Entry</a>` : ''}
+          </div>
+          <div class="card-body-flush">
+            ${candleRecords.length === 0 ? `
+              <div class="empty-state" style="padding:32px">
+                <div class="empty-icon" style="font-size:2rem">🕯️</div>
+                <p style="font-size:0.85rem">No candling records yet. Candle on Day 7 and Day 14.</p>
+              </div>` : `
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Day</th>
+                    <th>Infertile</th>
+                    <th>Early Dead</th>
+                    <th>Late Dead</th>
+                    <th>Fertile (est.)</th>
+                    <th>Recorded</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${candleRecords.map(r => `
+                    <tr>
+                      <td><strong>Day ${r.day_number}</strong></td>
+                      <td>${r.infertile ?? '—'}</td>
+                      <td>${r.early_dead ?? '—'}</td>
+                      <td>${r.late_dead ?? '—'}</td>
+                      <td>${r.fertile ?? '—'}</td>
+                      <td>${formatDate(r.created_at)}</td>
+                    </tr>`).join('')}
+                </tbody>
+              </table>`}
+          </div>
+        </div>
+      </div>
+
+      <!-- Right sidebar -->
+      <div>
+        <!-- Hatch result if exists -->
+        ${hatchRecord ? `
+        <div class="card mb-24" style="border-color:var(--green-mid)">
+          <div class="card-header">
+            <h3>🐥 Hatch Results</h3>
+            <span class="badge badge-green">Final</span>
+          </div>
+          <div class="card-body">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px">
+              <div class="batch-stat-mini">
+                <div class="batch-stat-mini-value" style="font-family:var(--font-display);font-size:1.4rem;font-weight:700;color:var(--ink)">${hatchRecord.hatched}</div>
+                <div style="font-size:0.68rem;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.05em">Hatched</div>
+              </div>
+              <div class="batch-stat-mini">
+                <div class="batch-stat-mini-value" style="font-family:var(--font-display);font-size:1.4rem;font-weight:700;color:var(--ink)">${((hatchRecord.hatched/batch.eggs_set)*100).toFixed(1)}%</div>
+                <div style="font-size:0.68rem;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.05em">Hatch Rate</div>
+              </div>
+              <div class="batch-stat-mini">
+                <div class="batch-stat-mini-value" style="font-family:var(--font-display);font-size:1.4rem;font-weight:700;color:var(--ink)">${hatchRecord.exploders ?? 0}</div>
+                <div style="font-size:0.68rem;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.05em">Exploders</div>
+              </div>
+              <div class="batch-stat-mini">
+                <div class="batch-stat-mini-value" style="font-family:var(--font-display);font-size:1.4rem;font-weight:700;color:var(--ink)">${hatchRecord.cull_chicks ?? 0}</div>
+                <div style="font-size:0.68rem;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.05em">Culls</div>
+              </div>
+            </div>
+            <a href="analytics.html?id=${batch.id}" class="btn btn-primary btn-full btn-sm">View Full Analytics →</a>
+          </div>
+        </div>` : ''}
+
+        <!-- Batch Info -->
+        <div class="card mb-24">
+          <div class="card-header">
+            <h3>📋 Batch Info</h3>
+            <button class="btn btn-ghost btn-sm" onclick="editBatch()">Edit</button>
+          </div>
+          <div class="card-body">
+            <div style="display:flex; flex-direction:column; gap:10px">
+              ${[
+                ['Batch ID', `<span class="font-mono" style="font-size:0.78rem">${batch.id.slice(0,8)}…</span>`],
+                ['Eggs Set', batch.eggs_set?.toLocaleString()],
+                ['Breed', batch.breed || '—'],
+                ['Egg Source', batch.egg_source || '—'],
+                ['Start Date', formatDate(batch.start_date)],
+                ['Expected Hatch', formatDate(hatchDate(batch.start_date))],
+                ['Incubator', batch.incubators?.name || '—'],
+                ['Air Type', batch.air_type === 'forced_air' ? 'Forced Air' : 'Still Air'],
+                ['Egg Weight', batch.egg_weight_start ? batch.egg_weight_start + 'g' : '—'],
+              ].map(([k, v]) => `
+                <div class="flex justify-between items-center" style="padding:6px 0; border-bottom:1px solid var(--cream-dark); gap:8px">
+                  <span style="font-size:0.78rem; color:var(--ink-faint); font-weight:600; white-space:nowrap">${k}</span>
+                  <span style="font-size:0.85rem; color:var(--ink); font-weight:500; text-align:right">${v || '—'}</span>
+                </div>`).join('')}
+            </div>
+          </div>
+        </div>
+
+        <!-- Notes -->
+        ${batch.notes ? `
+        <div class="card">
+          <div class="card-header"><h3>📝 Notes</h3></div>
+          <div class="card-body">
+            <p style="font-size:0.88rem; white-space:pre-wrap">${batch.notes}</p>
+          </div>
+        </div>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+async function markComplete() {
+  if (!batchData) return;
+  if (!confirm('Mark this batch as completed?')) return;
+
+  const { error } = await db
+    .from('batches')
+    .update({ status: 'completed', completed_at: new Date().toISOString() })
+    .eq('id', batchData.id);
+
+  if (error) { toast('Failed to update batch', 'error'); return; }
+  toast('Batch marked as completed', 'success');
+  setTimeout(() => location.reload(), 800);
+}
+
+function editBatch() {
+  toast('Edit functionality — coming soon!', 'warning');
+}
+</script>
+</body>
+</html>
