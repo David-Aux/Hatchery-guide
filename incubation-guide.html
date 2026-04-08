@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Incubation Guide — Hatchery Guide</title>
+  <link rel="stylesheet" href="styles.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    .guide-hero {
+      background: linear-gradient(135deg, var(--green-dark) 0%, #0F4C2A 100%);
+      border-radius: var(--radius-xl);
+      padding: 32px;
+      color: #fff;
+      margin-bottom: 28px;
+      position: relative;
+      overflow: hidden;
+    }
+    .guide-hero::before {
+      content: '';
+      position: absolute;
+      width: 300px; height: 300px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(217,119,6,0.2) 0%, transparent 70%);
+      top: -60px; right: -60px;
+    }
+    .guide-hero h2 { color: #fff; font-size: 1.8rem; margin-bottom: 8px; }
+    .guide-hero p  { color: rgba(255,255,255,0.6); max-width: 520px; }
+
+    /* Stage cards */
+    .stage-card {
+      border-radius: var(--radius-xl);
+      overflow: hidden;
+      margin-bottom: 20px;
+      border: 1.5px solid var(--parchment);
+    }
+
+    .stage-header {
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .stage-header-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .stage-icon-circle {
+      width: 48px; height: 48px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.4rem;
+      flex-shrink: 0;
+    }
+
+    .stage-title { font-family: var(--font-display); font-size: 1.1rem; font-weight: 600; }
+    .stage-days  { font-size: 0.75rem; font-weight: 600; opacity: 0.7; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.06em; }
+    .stage-chevron { font-size: 1rem; transition: transform 0.25s; }
+    .stage-card.open .stage-chevron { transform: rotate(180deg); }
+
+    .stage-body {
+      display: none;
+      padding: 0 24px 24px;
+      background: #fff;
+    }
+    .stage-card.open .stage-body { display: block; }
+
+    /* Params table */
+    .params-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .param-box {
+      background: var(--cream);
+      border: 1.5px solid var(--parchment);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+    }
+
+    .param-label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-faint); margin-bottom: 4px; }
+    .param-value { font-family: var(--font-display); font-size: 1.1rem; font-weight: 700; color: var(--ink); }
+    .param-range { font-size: 0.72rem; color: var(--ink-faint); margin-top: 2px; }
+
+    /* Day-by-day */
+    .day-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--cream-dark);
+    }
+    .day-row:last-child { border-bottom: none; }
+
+    .day-number {
+      width: 36px; height: 36px;
+      border-radius: 8px;
+      background: var(--amber-pale);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--amber-dark);
+      flex-shrink: 0;
+    }
+    .day-number.candle   { background: var(--amber); color: #fff; }
+    .day-number.lockdown { background: var(--red-pale); color: var(--red-alert); border: 1.5px solid var(--red-alert); }
+    .day-number.hatch    { background: var(--green-light); color: var(--green-dark); border: 1.5px solid var(--green-mid); }
+
+    .day-content { flex: 1; }
+    .day-title   { font-size: 0.88rem; font-weight: 600; color: var(--ink); margin-bottom: 2px; }
+    .day-detail  { font-size: 0.78rem; color: var(--ink-faint); line-height: 1.5; }
+    .day-badges  { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 5px; }
+
+    /* Troubleshooting */
+    .trouble-item {
+      padding: 16px 0;
+      border-bottom: 1px solid var(--cream-dark);
+    }
+    .trouble-item:last-child { border-bottom: none; }
+    .trouble-symptom { font-size: 0.9rem; font-weight: 700; color: var(--ink); margin-bottom: 6px; display: flex; gap: 8px; align-items: center; }
+    .trouble-causes  { font-size: 0.82rem; color: var(--ink-mid); margin-bottom: 6px; }
+    .trouble-fixes   { font-size: 0.82rem; color: var(--green-dark); font-weight: 500; }
+
+    .quick-ref-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+    }
+
+    .qr-card {
+      background: var(--cream);
+      border: 1.5px solid var(--parchment);
+      border-radius: var(--radius-md);
+      padding: 16px;
+    }
+    .qr-card h4 { font-size: 0.82rem; margin-bottom: 10px; color: var(--ink-mid); }
+    .qr-line { display: flex; justify-content: space-between; font-size: 0.8rem; padding: 4px 0; border-bottom: 1px solid var(--cream-dark); gap: 8px; }
+    .qr-line:last-child { border-bottom: none; }
+    .qr-line span:first-child { color: var(--ink-faint); }
+    .qr-line span:last-child  { font-weight: 600; color: var(--ink); }
+  </style>
+</head>
+<body>
+<script src="app.js"></script>
+<script src="shell.js"></script>
+<script>
+(async () => {
+  const ctx = await initShell({ page: 'incubation-guide', title: 'Incubation Guide' });
+  if (!ctx) return;
+  renderGuide();
+})();
+
+function renderGuide() {
+  const pb = document.getElementById('page-body');
+
+  pb.innerHTML = `
+    <div class="page-header">
+      <h1>🌡️ Incubation Guide</h1>
+      <p>Complete reference for broiler and layer chicken incubation — Day 1 through hatch.</p>
+    </div>
+
+    <div class="guide-hero">
+      <h2>21-Day Broiler / Layer Reference</h2>
+      <p>Based on established commercial hatchery science and Pas Reform incubation protocols. Use this as your in-field reference for every stage of incubation.</p>
+    </div>
+
+    <!-- Quick Reference -->
+    <div class="card mb-24">
+      <div class="card-header"><h3>⚡ Quick Reference</h3></div>
+      <div class="card-body">
+        <div class="quick-ref-grid">
+          <div class="qr-card">
+            <h4>🌡️ Temperature</h4>
+            <div class="qr-line"><span>Setter (forced air)</span><span>37.5°C</span></div>
+            <div class="qr-line"><span>Setter (still air)</span><span>38.3°C</span></div>
+            <div class="qr-line"><span>Hatcher (forced air)</span><span>37.2°C</span></div>
+            <div class="qr-line"><span>Danger (high)</span><span>> 38.0°C</span></div>
+            <div class="qr-line"><span>Danger (low)</span><span>< 36.0°C</span></div>
+          </div>
+          <div class="qr-card">
+            <h4>💧 Humidity (%RH)</h4>
+            <div class="qr-line"><span>Setter (Day 1–17)</span><span>50–60%</span></div>
+            <div class="qr-line"><span>Hatcher (Day 18–21)</span><span>65–75%</span></div>
+            <div class="qr-line"><span>Optimal egg weight loss</span><span>11–13%</span></div>
+            <div class="qr-line"><span>Wet bulb (setter)</span><span>~29°C</span></div>
+            <div class="qr-line"><span>Wet bulb (hatcher)</span><span>~33°C</span></div>
+          </div>
+          <div class="qr-card">
+            <h4>🔄 Turning</h4>
+            <div class="qr-line"><span>Frequency</span><span>Every 4 hrs</span></div>
+            <div class="qr-line"><span>Minimum angle</span><span>45°</span></div>
+            <div class="qr-line"><span>Recommended angle</span><span>90°</span></div>
+            <div class="qr-line"><span>Stop turning</span><span>Day 18</span></div>
+            <div class="qr-line"><span>Total turns (21 days)</span><span>~102</span></div>
+          </div>
+          <div class="qr-card">
+            <h4>🕯️ Candling</h4>
+            <div class="qr-line"><span>First candle</span><span>Day 7</span></div>
+            <div class="qr-line"><span>Second candle</span><span>Day 14</span></div>
+            <div class="qr-line"><span>Remove infertile</span><span>Day 7+</span></div>
+            <div class="qr-line"><span>Remove late dead</span><span>Day 14+</span></div>
+            <div class="qr-line"><span>Exploders</span><span>Remove immediately</span></div>
+          </div>
+          <div class="qr-card">
+            <h4>🏆 Benchmarks</h4>
+            <div class="qr-line"><span>Fertility</span><span>> 85%</span></div>
+            <div class="qr-line"><span>Total hatch</span><span>> 80%</span></div>
+            <div class="qr-line"><span>Hatch of fertile</span><span>> 88%</span></div>
+            <div class="qr-line"><span>Early mortality</span><span>< 2.5%</span></div>
+            <div class="qr-line"><span>Late mortality</span><span>< 2%</span></div>
+          </div>
+          <div class="qr-card">
+            <h4>📅 Key Days</h4>
+            <div class="qr-line"><span>Set eggs</span><span>Day 0</span></div>
+            <div class="qr-line"><span>First candle</span><span>Day 7</span></div>
+            <div class="qr-line"><span>Second candle</span><span>Day 14</span></div>
+            <div class="qr-line"><span>Lockdown</span><span>Day 18</span></div>
+            <div class="qr-line"><span>Expected hatch</span><span>Day 21</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stage 1 -->
+    ${stageCard({
+      id: 'stage1',
+      color: '#F59E0B',
+      bg: '#FEF3C7',
+      icon: '🌱',
+      title: 'Stage 1 — Setting',
+      days: 'Days 1–7',
+      open: true,
+      params: [
+        { label: 'Temperature',    value: '37.5°C', range: 'Range: 37.2–37.8°C' },
+        { label: 'Humidity',       value: '55% RH', range: 'Range: 50–60%' },
+        { label: 'Turning',        value: 'Active',  range: 'Every 4 hrs, 45°+ angle' },
+        { label: 'Ventilation',    value: 'Minimal', range: 'Open vents slightly' },
+        { label: 'Key Event',      value: 'Day 7',   range: 'First candling' },
+      ],
+      days_detail: [
+        { day: 1,  title: 'Egg Setting',              detail: 'Pre-warm eggs to room temperature (18–25°C) for 6–12 hours before setting. Place large end up. Ensure incubator is pre-warmed and calibrated. Blood islands begin forming.', badges: [] },
+        { day: 2,  title: 'Circulatory System Begins', detail: 'Heart begins beating. Blood circulation initiates. Early embryo disc visible under bright light. Keep temperature stable — avoid opening incubator.', badges: [] },
+        { day: 3,  title: 'Turning Critical',          detail: 'Embryo is attaching. Turning must be consistent. Skipping turns at this stage causes adhesion of embryo membranes to shell. Vascular network expanding.', badges: ['⚠️ Critical turning period'] },
+        { day: 4,  title: 'Eye Pigmentation',          detail: 'Eye pigment (choroid) visible. Allantois begins forming. Embryo growing rapidly. Temperature spikes dangerous — embryo has no thermoregulatory capacity.', badges: [] },
+        { day: 5,  title: 'Limb Buds',                 detail: 'Wings and legs visible as limb buds. Allantois continues expanding. Embryo begins turning on its own axis. Maintain strict 37.5°C.', badges: [] },
+        { day: 6,  title: 'Beak Formation',            detail: 'Beak cartilage begins forming. Feather follicles initiating. Allantois has fused with inner shell membrane — critical for oxygen exchange.', badges: [] },
+        { day: 7,  title: '🕯️ FIRST CANDLING DAY',    detail: 'Candle in a darkened room. Fertile: visible veining (spider-web), dark eye spot, movement. Infertile: glows clear, only yolk shadow. Early dead: blood ring or dark mass. Remove infertile and dead eggs promptly.', badges: ['🕯️ Candle today', '🗑️ Remove clear eggs'] },
+      ]
+    })}
+
+    <!-- Stage 2 -->
+    ${stageCard({
+      id: 'stage2',
+      color: '#15803D',
+      bg: '#DCFCE7',
+      icon: '🌿',
+      title: 'Stage 2 — Mid-Term Development',
+      days: 'Days 8–17',
+      open: false,
+      params: [
+        { label: 'Temperature',    value: '37.5°C', range: 'Range: 37.2–37.8°C' },
+        { label: 'Humidity',       value: '55% RH', range: 'Range: 50–60%' },
+        { label: 'Turning',        value: 'Active',  range: 'Continue every 4 hrs' },
+        { label: 'Ventilation',    value: 'Moderate', range: 'Increase as embryo grows' },
+        { label: 'Key Event',      value: 'Day 14',  range: 'Second candling' },
+      ],
+      days_detail: [
+        { day: 8,  title: 'Feather Tracts',           detail: 'Feather tracts become visible. Allantois covers entire egg interior, providing full respiratory exchange. Embryo enters rapid growth phase.', badges: [] },
+        { day: 9,  title: 'Digit Separation',          detail: 'Toes begin separating. Eyelids forming. CO₂ production increasing — adequate ventilation critical. Monitor for overheating.', badges: [] },
+        { day: 10, title: 'Hard Beak',                 detail: 'Beak hardening begins. Claws visible. Embryo starts consuming significant oxygen — increase ventilation slightly. Still Air machines need extra monitoring.', badges: [] },
+        { day: 11, title: 'Downy Feathers',            detail: 'Down feathers emerge on body. Scale formation on legs. Embryo now recognizable as a chick. Weight loss should be at 5–6% (target: 11–13% by Day 18).', badges: [] },
+        { day: 12, title: 'Toes Complete',             detail: 'All digits complete. Embryo has begun synthesizing yolk proteins for rapid growth. Ventilation needs increasing — higher O₂ demand.', badges: [] },
+        { day: 13, title: 'Scale Formation',           detail: 'Leg scales forming. Embryo increasingly active. Weight loss accumulating toward ideal 11–13% at lockdown. If losing too much weight: increase humidity.', badges: [] },
+        { day: 14, title: '🕯️ SECOND CANDLING DAY',   detail: 'Candle to identify late dead embryos. Fertile live: dark, fills most of egg, air cell visible and growing. Late dead: dark but no movement, air cell may be misshapen. Remove late deads — they become exploders.', badges: ['🕯️ Candle today', '🗑️ Remove late dead'] },
+        { day: 15, title: 'Scales and Claws',          detail: 'Scales and claws fully formed. Head tucking into right wing begins. Embryo is now very active — you may be able to feel movement if you gently hold the egg.', badges: [] },
+        { day: 16, title: 'Albumin Consumption',       detail: 'Remaining egg white (albumin) being absorbed. Embryo absorbing yolk sac into abdomen. CO₂ production at highest — maximum ventilation required.', badges: ['🌬️ Increase ventilation'] },
+        { day: 17, title: 'Final Positioning',          detail: 'Embryo positions head under right wing, pointing toward air cell. Yolk almost fully absorbed. This is the last day before lockdown — final check of temperature and humidity.', badges: ['⚠️ Lockdown tomorrow'] },
+      ]
+    })}
+
+    <!-- Stage 3 -->
+    ${stageCard({
+      id: 'stage3',
+      color: '#DC2626',
+      bg: '#FEE2E2',
+      icon: '🔒',
+      title: 'Stage 3 — Lockdown',
+      days: 'Days 18–19',
+      open: false,
+      params: [
+        { label: 'Temperature',    value: '37.2°C', range: 'Hatcher range: 37.0–37.5°C' },
+        { label: 'Humidity',       value: '70% RH', range: 'Range: 65–75%' },
+        { label: 'Turning',        value: '🛑 STOP', range: 'No turning from Day 18' },
+        { label: 'Ventilation',    value: 'Maximum', range: 'Open all vents fully' },
+        { label: 'Key Event',      value: 'Day 18',  range: 'Transfer to hatcher' },
+      ],
+      days_detail: [
+        { day: 18, title: '🔒 LOCKDOWN — Critical Day', detail: 'STOP ALL TURNING immediately. Transfer eggs to hatcher (or lay flat if combined machine). Raise humidity to 65–75%. Open all ventilation ports. Lower temperature slightly to 37.2°C. Do not open incubator again until 95% of chicks are hatched. Embryo must orient correctly for internal pip.', badges: ['🛑 Stop turning', '💧 Raise humidity to 70%', '🌬️ Max ventilation', '🌡️ Lower to 37.2°C'] },
+        { day: 19, title: 'Internal Pip',              detail: 'Embryo breaks through the inner membrane into the air cell — this is the "internal pip." You may hear peeping sounds. The chick begins breathing air. Do NOT open the incubator — humidity loss during this stage kills chicks.', badges: ['🐣 Listen for peeping', '🚫 Do not open'] },
+      ]
+    })}
+
+    <!-- Stage 4 -->
+    ${stageCard({
+      id: 'stage4',
+      color: '#1D4ED8',
+      bg: '#DBEAFE',
+      icon: '🐥',
+      title: 'Stage 4 — Hatching',
+      days: 'Days 20–21',
+      open: false,
+      params: [
+        { label: 'Temperature',    value: '37.2°C', range: 'Hatcher: 37.0–37.5°C' },
+        { label: 'Humidity',       value: '70% RH', range: 'Range: 65–75%' },
+        { label: 'Turning',        value: 'STOPPED', range: 'Lay flat or hatcher trays' },
+        { label: 'Ventilation',    value: 'Maximum', range: 'Maximum O₂ for chicks' },
+        { label: 'Key Event',      value: 'Day 21',  range: 'Expected hatch' },
+      ],
+      days_detail: [
+        { day: 20, title: 'External Pip',              detail: 'Chick breaks through the shell — the "external pip." Small hole visible. Chick uses egg tooth (caruncle) on upper beak. Hatching muscle at back of neck drives the pip. Do NOT assist — the process strengthens the chick. Only assist if stuck for 24+ hours after external pip.', badges: ['🐣 External pip begins', '🚫 Do not assist too early'] },
+        { day: 21, title: '🐥 HATCH DAY',              detail: 'Expected hatch day. Chick "zips" around the circumference of the egg and pushes off the cap. Leave chicks in hatcher for 12–24 hours to dry and fluff. Only remove when feathers are dry and fluffy. Remove unhatched eggs to check — some may be alive. Count: hatched, culls, exploders, unhatched, dead-in-shell.', badges: ['🐥 Chicks hatching', '⏳ Wait for dry fluff', '📊 Record results'] },
+      ]
+    })}
+
+    <!-- Troubleshooting -->
+    <div class="card mb-24">
+      <div class="card-header"><h3>🔧 Troubleshooting Guide</h3></div>
+      <div class="card-body">
+        ${troubleGuide()}
+      </div>
+    </div>
+
+    <!-- Embryo Development Visual -->
+    <div class="card">
+      <div class="card-header"><h3>📖 Understanding Embryo Mortality</h3></div>
+      <div class="card-body">
+        <div style="display:grid; gap:12px">
+          ${[
+            { icon: '🩸', title: 'Early Mortality (Days 1–7)', badge: 'badge-amber', causes: 'High incubation temperature, disease in parent flock, old eggs (>7 days), vitamin deficiencies (Vitamin A, E), handling damage.', appearance: 'Blood ring visible at candling. Dark mass. Yolk appears broken.' },
+            { icon: '🌑', title: 'Mid Mortality (Days 8–17)', badge: 'badge-amber', causes: 'Temperature fluctuations, turning failures, poor ventilation (CO₂ buildup), nutritional deficiencies in parent flock.', appearance: 'Partially developed embryo. Visible but not full-term. Often found at Day 14 candle.' },
+            { icon: '💀', title: 'Late Mortality (Days 18–21)', badge: 'badge-red', causes: 'Low humidity at lockdown, poor ventilation, bacterial infection, genetic abnormalities, incorrect lockdown timing.', appearance: 'Full-term chick, positioned in egg but dead. May be fully formed. Found as dead-in-shell at hatch.' },
+            { icon: '💥', title: 'Exploders', badge: 'badge-red', causes: 'Bacterial contamination — Pseudomonas, Salmonella, E. coli. Caused by cracked eggs, dirty eggs, contaminated incubator, poor washing protocols.', appearance: 'Dark liquid inside egg, foul smell, bulging shell, leaking. REMOVE IMMEDIATELY to prevent cross-contamination.' },
+          ].map(e => `
+            <div style="padding:14px 0; border-bottom:1px solid var(--cream-dark)">
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px">
+                <span style="font-size:1.2rem">${e.icon}</span>
+                <strong style="font-size:0.9rem">${e.title}</strong>
+                <span class="badge ${e.badge}">Risk</span>
+              </div>
+              <div style="font-size:0.82rem; color:var(--ink-mid); margin-bottom:4px"><strong>Causes:</strong> ${e.causes}</div>
+              <div style="font-size:0.82rem; color:var(--ink-faint)"><strong>Appearance:</strong> ${e.appearance}</div>
+            </div>`).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Open first stage
+  document.getElementById('stage1-card')?.classList.add('open');
+}
+
+function stageCard({ id, color, bg, icon, title, days, open, params, days_detail }) {
+  const paramsHTML = params.map(p => `
+    <div class="param-box">
+      <div class="param-label">${p.label}</div>
+      <div class="param-value">${p.value}</div>
+      <div class="param-range">${p.range}</div>
+    </div>`).join('');
+
+  const daysHTML = days_detail.map(d => {
+    const isCandle   = INCUBATION.CANDLE_DAYS.includes(d.day);
+    const isLockdown = d.day >= 18 && d.day <= 19;
+    const isHatch    = d.day >= 20;
+    const cls = isCandle ? 'candle' : isLockdown ? 'lockdown' : isHatch ? 'hatch' : '';
+    return `
+      <div class="day-row">
+        <div class="day-number ${cls}">D${d.day}</div>
+        <div class="day-content">
+          <div class="day-title">${d.title}</div>
+          <div class="day-detail">${d.detail}</div>
+          ${d.badges?.length ? `<div class="day-badges">${d.badges.map(b => `<span class="badge badge-amber">${b}</span>`).join('')}</div>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="stage-card" id="${id}-card">
+      <div class="stage-header" style="background:${bg}" onclick="toggleStage('${id}-card')">
+        <div class="stage-header-left">
+          <div class="stage-icon-circle" style="background:${color}; color:#fff">${icon}</div>
+          <div>
+            <div class="stage-title" style="color:${color}">${title}</div>
+            <div class="stage-days" style="color:${color}">${days}</div>
+          </div>
+        </div>
+        <div class="stage-chevron" style="color:${color}">▼</div>
+      </div>
+      <div class="stage-body">
+        <div class="params-row mt-16">${paramsHTML}</div>
+        <hr class="divider" style="margin:16px 0"/>
+        <h4 style="margin-bottom:12px; font-size:0.9rem; color:var(--ink-mid)">Day-by-Day</h4>
+        ${daysHTML}
+      </div>
+    </div>`;
+}
+
+function toggleStage(id) {
+  const card = document.getElementById(id);
+  if (card) card.classList.toggle('open');
+}
+
+function troubleGuide() {
+  const items = [
+    {
+      icon: '📉', symptom: 'Low overall hatch rate (< 70%)',
+      causes: 'Multiple possible causes: poor fertility, temperature issues, humidity problems, disease.',
+      fixes: 'Fix: Break down into fertility % and hatch of fertile %. Tackle each separately. Use the Analytics page.',
+    },
+    {
+      icon: '⬇️', symptom: 'Low fertility (< 80%)',
+      causes: 'Poor male:female ratio (ideal: 1:8–10), old or sick roosters, poor nutrition, disease (Marek\'s, IB), heat stress in breeder flock.',
+      fixes: 'Fix: Evaluate rooster health, replace old males, review flock nutrition, test for disease.',
+    },
+    {
+      icon: '🩸', symptom: 'High early embryo mortality (> 5%)',
+      causes: 'High temperature (especially first 3 days), diseased parent flock, old eggs (> 7 days), vitamin A or E deficiency, fumigation errors.',
+      fixes: 'Fix: Calibrate setter temperature. Check egg storage (ideal: 15–18°C). Source eggs from healthy flocks.',
+    },
+    {
+      icon: '💀', symptom: 'High late mortality / dead-in-shell (> 5%)',
+      causes: 'Low humidity at lockdown, CO₂ buildup, bacterial infection, chick malposition, genetic issues.',
+      fixes: 'Fix: Raise humidity to 70%+ at lockdown. Check ventilation. Clean hatcher thoroughly between batches.',
+    },
+    {
+      icon: '💧', symptom: 'Chicks sticky / wet at hatch',
+      causes: 'Humidity too high during incubation or at hatch. Eggs lost less than 11% weight.',
+      fixes: 'Fix: Lower setter humidity. Increase ventilation in setter. Target 11–13% weight loss by Day 18.',
+    },
+    {
+      icon: '🏜️', symptom: 'Chicks dry / shrunken / stuck to shell',
+      causes: 'Humidity too low. Eggs lost more than 13% weight. Chick dehydrated.',
+      fixes: 'Fix: Raise humidity in setter. Reduce ventilation slightly. Add water tray to increase RH.',
+    },
+    {
+      icon: '💥', symptom: 'High exploder rate (> 2%)',
+      causes: 'Bacterial contamination — dirty eggs, cracked shells, contaminated incubator, poor hygiene.',
+      fixes: 'Fix: Deep clean incubator. Remove dirty eggs before setting. Never wash eggs (destroys cuticle). Candle and remove any cracks.',
+    },
+    {
+      icon: '🐣', symptom: 'Chicks hatching too early (< Day 20)',
+      causes: 'Temperature too high during incubation. Early chicks often weak and small.',
+      fixes: 'Fix: Calibrate thermometer. Reduce temperature by 0.2–0.3°C. Monitor with second independent thermometer.',
+    },
+    {
+      icon: '⏰', symptom: 'Chicks hatching too late (> Day 22)',
+      causes: 'Temperature too low. Old eggs (> 7 days pre-incubation). Cold spells during incubation.',
+      fixes: 'Fix: Calibrate and increase temperature slightly. Use fresher eggs. Check for cold drafts near incubator.',
+    },
+  ];
+
+  return items.map(i => `
+    <div class="trouble-item">
+      <div class="trouble-symptom">${i.icon} ${i.symptom}</div>
+      <div class="trouble-causes"><strong>Likely causes:</strong> ${i.causes}</div>
+      <div class="trouble-fixes">✓ ${i.fixes}</div>
+    </div>`).join('');
+}
+</script>
+</body>
+</html>
