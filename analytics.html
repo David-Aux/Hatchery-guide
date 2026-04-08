@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Analytics — Hatchery Guide</title>
+  <link rel="stylesheet" href="styles.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    .analytics-hero {
+      background: linear-gradient(135deg, var(--ink) 0%, var(--ink-mid) 100%);
+      border-radius: var(--radius-xl);
+      padding: 28px 32px;
+      color: #fff;
+      margin-bottom: 28px;
+      position: relative;
+      overflow: hidden;
+    }
+    .analytics-hero::after {
+      content: '🧬';
+      position: absolute; right: 24px; top: 50%;
+      transform: translateY(-50%);
+      font-size: 5rem; opacity: 0.12;
+    }
+    .analytics-hero h2 { color: #fff; margin-bottom: 4px; }
+    .analytics-hero p  { color: rgba(255,255,255,0.55); font-size:0.88rem; }
+
+    .ring-grid {
+      display: flex;
+      gap: 0;
+      justify-content: space-around;
+      flex-wrap: wrap;
+      padding: 8px 0;
+    }
+
+    .ring-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      padding: 16px 12px;
+      flex: 1;
+      min-width: 100px;
+      text-align: center;
+    }
+
+    .ring-value {
+      font-family: var(--font-display);
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    .ring-label {
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--ink-faint);
+    }
+
+    .perf-meter {
+      padding: 20px 0;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      border-bottom: 1px solid var(--cream-dark);
+    }
+    .perf-meter:last-child { border-bottom: none; }
+    .perf-meter-info { flex: 1; min-width: 0; }
+    .perf-meter-name  { font-size: 0.88rem; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+    .perf-meter-sub   { font-size: 0.75rem; color: var(--ink-faint); }
+    .perf-meter-value { font-family: var(--font-display); font-size: 1.2rem; font-weight: 700; min-width: 60px; text-align: right; }
+    .perf-meter-bar   { width: 120px; flex-shrink: 0; }
+
+    .benchmark-line {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--cream-dark);
+      gap: 8px;
+    }
+    .benchmark-line:last-child { border-bottom: none; }
+    .benchmark-label { font-size: 0.82rem; color: var(--ink-mid); }
+    .benchmark-target { font-size: 0.75rem; color: var(--ink-faint); }
+    .benchmark-actual { font-family: var(--font-mono); font-size: 0.88rem; font-weight: 600; }
+
+    .batch-selector-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+
+    .batch-selector-bar label { font-size: 0.85rem; font-weight: 600; color: var(--ink-mid); white-space: nowrap; }
+  </style>
+</head>
+<body>
+<script src="app.js"></script>
+<script src="shell.js"></script>
+<script>
+let allBatches    = [];
+let currentUserId = null;
+
+(async () => {
+  const ctx = await initShell({ page: 'analytics', title: 'Hatchery Analytics' });
+  if (!ctx) return;
+  currentUserId = ctx.user.id;
+
+  const params = new URLSearchParams(window.location.search);
+  const preId  = params.get('id');
+
+  const { data: batches } = await db
+    .from('batches')
+    .select('*, candling_records(*), hatch_records(*)')
+    .eq('user_id', ctx.user.id)
+    .order('created_at', { ascending: false });
+
+  allBatches = batches || [];
+  renderAnalyticsPage(preId);
+})();
+
+function renderAnalyticsPage(preSelectedId) {
+  const pb = document.getElementById('page-body');
+
+  const completed = allBatches.filter(b => b.hatch_records?.length > 0);
+
+  pb.innerHTML = `
+    <div class="page-header">
+      <h1>🧬 Hatchery Analytics</h1>
+      <p>Performance metrics, embryo mortality analysis, and benchmarking.</p>
+    </div>
+
+    <div class="analytics-hero">
+      <h2>Biological Intelligence</h2>
+      <p>Every number tells a story about your flock's health, your incubation conditions, and your hatchery management.</p>
+    </div>
+
+    <!-- Batch Selector -->
+    <div class="batch-selector-bar">
+      <label>Analyze Batch:</label>
+      <select class="form-select" id="batch-select" style="max-width:400px" onchange="loadBatchAnalytics(this.value)">
+        <option value="overview">📊 Hatchery Overview (All Batches)</option>
+        ${completed.map(b => `
+          <option value="${b.id}" ${b.id === preSelectedId ? 'selected' : ''}>
+            ${b.batch_name} · ${b.eggs_set} eggs · ${formatDate(b.start_date)}
+          </option>`).join('')}
+      </select>
+    </div>
+
+    <div id="analytics-content">
+      <div class="empty-state">
+        <span class="spinner"></span>
+      </div>
+    </div>
+  `;
+
+  const defaultId = preSelectedId && completed.find(b => b.id === preSelectedId) ? preSelectedId : 'overview';
+  loadBatchAnalytics(defaultId);
+}
+
+function loadBatchAnalytics(value) {
+  if (value === 'overview') {
+    renderOverview();
+  } else {
+    const batch = allBatches.find(b => b.id === value);
+    if (batch) renderBatchAnalytics(batch);
+  }
+}
+
+function renderOverview() {
+  const completed = allBatches.filter(b => b.hatch_records?.length > 0);
+  const container = document.getElementById('analytics-content');
+
+  if (completed.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">📊</div>
+        <h3>No completed batches yet</h3>
+        <p>Complete a batch by entering hatch results to see analytics.</p>
+        <a href="hatch-results.html" class="btn btn-primary mt-16">Enter Hatch Results</a>
+      </div>`;
+    return;
+  }
+
+  // Aggregate
+  let totalEggs = 0, totalFertile = 0, totalHatched = 0, totalCulls = 0, totalExploders = 0;
+  const hatchPcts = [], hofPcts = [], fertPcts = [];
+
+  completed.forEach(b => {
+    const hr = b.hatch_records[0];
+    const cr = b.candling_records?.slice().sort((a,z)=>z.day_number-a.day_number)[0];
+    const fertile = cr?.fertile ?? b.fertile_count ?? 0;
+
+    totalEggs      += b.eggs_set  || 0;
+    totalFertile   += fertile;
+    totalHatched   += hr.hatched  || 0;
+    totalCulls     += hr.cull_chicks || 0;
+    totalExploders += hr.exploders   || 0;
+
+    if (b.eggs_set)  hatchPcts.push((hr.hatched / b.eggs_set) * 100);
+    if (b.eggs_set)  fertPcts.push((fertile / b.eggs_set) * 100);
+    if (fertile)     hofPcts.push((hr.hatched / fertile) * 100);
+  });
+
+  const avg = arr => arr.length ? (arr.reduce((a,b)=>a+b,0)/arr.length) : 0;
+  const avgHatch  = avg(hatchPcts);
+  const avgFert   = avg(fertPcts);
+  const avgHof    = avg(hofPcts);
+
+  container.innerHTML = `
+    <!-- Summary Stats -->
+    <div class="stat-grid mb-24">
+      <div class="stat-card">
+        <div class="stat-icon">📦</div>
+        <div class="stat-value">${completed.length}</div>
+        <div class="stat-label">Batches Analyzed</div>
+      </div>
+      <div class="stat-card green">
+        <div class="stat-icon">🐥</div>
+        <div class="stat-value">${totalHatched.toLocaleString()}</div>
+        <div class="stat-label">Total Hatched</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">🥚</div>
+        <div class="stat-value">${totalEggs.toLocaleString()}</div>
+        <div class="stat-label">Total Eggs Set</div>
+      </div>
+      <div class="stat-card blue">
+        <div class="stat-icon">💰</div>
+        <div class="stat-value">${(totalHatched - totalCulls).toLocaleString()}</div>
+        <div class="stat-label">Viable Chicks</div>
+      </div>
+    </div>
+
+    <!-- Metric Rings -->
+    <div class="card mb-24">
+      <div class="card-header"><h3>Key Performance Indicators</h3></div>
+      <div class="card-body">
+        <div class="ring-grid" id="ring-grid">
+          ${buildRingItems([
+            { id: 'r-fert',  pct: avgFert,  label: 'Avg Fertility',        thresholds: {good:85,warn:70} },
+            { id: 'r-hatch', pct: avgHatch, label: 'Avg Hatch Rate',       thresholds: {good:80,warn:65} },
+            { id: 'r-hof',   pct: avgHof,   label: 'Avg Hatch of Fertile', thresholds: {good:88,warn:75} },
+          ])}
+        </div>
+      </div>
+    </div>
+
+    <!-- Performance Meters -->
+    <div class="card mb-24">
+      <div class="card-header"><h3>Benchmark Comparison</h3></div>
+      <div class="card-body">
+        ${buildBenchmark([
+          { label: 'Fertility Rate',          actual: avgFert,  target: 85, unit: '%' },
+          { label: 'Total Hatch %',           actual: avgHatch, target: 80, unit: '%' },
+          { label: 'Hatch of Fertile %',      actual: avgHof,   target: 88, unit: '%' },
+          { label: 'Exploder Rate',           actual: totalEggs ? (totalExploders/totalEggs*100) : 0, target: 2,  unit: '%', invert: true },
+          { label: 'Cull Rate',               actual: totalHatched ? (totalCulls/totalHatched*100) : 0, target: 5, unit: '%', invert: true },
+        ])}
+      </div>
+    </div>
+
+    <!-- Batch History Table -->
+    <div class="card">
+      <div class="card-header"><h3>Batch History</h3></div>
+      <div class="card-body-flush">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Batch</th>
+              <th>Eggs Set</th>
+              <th>Fertile</th>
+              <th>Hatched</th>
+              <th>Hatch %</th>
+              <th>HoF %</th>
+              <th>Exploders</th>
+              <th>Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${completed.map(b => {
+              const hr = b.hatch_records[0];
+              const cr = b.candling_records?.slice().sort((a,z)=>z.day_number-a.day_number)[0];
+              const fertile = cr?.fertile ?? b.fertile_count ?? 0;
+              const hatchPct = b.eggs_set ? ((hr.hatched/b.eggs_set)*100).toFixed(1) : '—';
+              const hofPct   = fertile     ? ((hr.hatched/fertile)*100).toFixed(1)   : '—';
+              const hPctNum  = b.eggs_set  ? (hr.hatched/b.eggs_set)*100 : 0;
+              return `
+                <tr onclick="document.getElementById('batch-select').value='${b.id}'; loadBatchAnalytics('${b.id}')" style="cursor:pointer">
+                  <td><strong>${b.batch_name}</strong></td>
+                  <td>${b.eggs_set?.toLocaleString()}</td>
+                  <td>${fertile || '—'}</td>
+                  <td>${hr.hatched?.toLocaleString()}</td>
+                  <td><span class="badge ${hPctNum>=80?'badge-green':hPctNum>=65?'badge-amber':'badge-red'}">${hatchPct}%</span></td>
+                  <td>${hofPct !== '—' ? hofPct + '%' : '—'}</td>
+                  <td>${hr.exploders ?? 0}</td>
+                  <td>${formatDate(b.completed_at)}</td>
+                </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  // Render rings after DOM is set
+  setTimeout(() => {
+    [
+      { id: 'r-fert',  pct: avgFert,  thresholds:{good:85,warn:70} },
+      { id: 'r-hatch', pct: avgHatch, thresholds:{good:80,warn:65} },
+      { id: 'r-hof',   pct: avgHof,   thresholds:{good:88,warn:75} },
+    ].forEach(r => {
+      const color = r.pct >= r.thresholds.good ? 'var(--green-mid)' : r.pct >= r.thresholds.warn ? 'var(--amber)' : 'var(--red-alert)';
+      renderMetricRing(r.id, Math.min(100, r.pct), color);
+    });
+  }, 50);
+}
+
+function renderBatchAnalytics(batch) {
+  const container = document.getElementById('analytics-content');
+  const hr = batch.hatch_records?.[0];
+  if (!hr) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">🥚</div><h3>No hatch results yet</h3><a href="hatch-results.html?id=${batch.id}" class="btn btn-primary mt-16">Enter Hatch Results</a></div>`;
+    return;
+  }
+
+  const cr      = batch.candling_records?.slice().sort((a,z)=>z.day_number-a.day_number)[0];
+  const fertile = cr?.fertile ?? batch.fertile_count ?? 0;
+
+  const metrics = Analytics.calculate({
+    eggs_set:        batch.eggs_set,
+    fertile,
+    hatched:         hr.hatched,
+    early_dead:      cr?.early_dead || 0,
+    late_dead:       cr?.late_dead  || 0,
+    exploders:       hr.exploders   || 0,
+    cull_chicks:     hr.cull_chicks || 0,
+    egg_weight_start: batch.egg_weight_start,
+    egg_weight_end:   hr.egg_weight_end,
+  });
+
+  const { issues, good } = Analytics.interpret(metrics);
+
+  container.innerHTML = `
+    <!-- Batch Header -->
+    <div class="card mb-24" style="border-color:var(--amber)">
+      <div class="card-body">
+        <div class="flex justify-between items-center flex-wrap gap-12">
+          <div>
+            <h2 style="font-size:1.3rem; margin-bottom:4px">${batch.batch_name}</h2>
+            <div style="font-size:0.8rem; color:var(--ink-faint); display:flex; gap:12px; flex-wrap:wrap">
+              <span>🐔 ${batch.breed || 'Broiler/Layer'}</span>
+              <span>🥚 ${batch.eggs_set?.toLocaleString()} eggs set</span>
+              <span>📅 ${formatDate(batch.start_date)} → ${formatDate(batch.completed_at)}</span>
+              ${batch.egg_source ? `<span>📍 ${batch.egg_source}</span>` : ''}
+            </div>
+          </div>
+          <span class="badge badge-green">✓ Completed</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rings -->
+    <div class="card mb-24">
+      <div class="card-header"><h3>Performance Snapshot</h3></div>
+      <div class="card-body">
+        <div class="ring-grid">
+          ${buildRingItems([
+            { id: 'br-fert',  pct: metrics.fertility_pct,        label: 'Fertility',       thresholds:{good:85,warn:70} },
+            { id: 'br-hatch', pct: metrics.total_hatch_pct,      label: 'Total Hatch',     thresholds:{good:80,warn:65} },
+            { id: 'br-hof',   pct: metrics.hatch_of_fertile_pct, label: 'Hatch of Fertile', thresholds:{good:88,warn:75} },
+          ])}
+        </div>
+      </div>
+    </div>
+
+    <!-- Full Metrics -->
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-bottom:24px">
+      <div class="card">
+        <div class="card-header"><h3>📊 Full Metrics</h3></div>
+        <div class="card-body">
+          ${buildMetricRows([
+            { label: 'Eggs Set',              value: batch.eggs_set?.toLocaleString() },
+            { label: 'Fertile Eggs',          value: fertile || '—' },
+            { label: 'Hatched',               value: hr.hatched?.toLocaleString() },
+            { label: 'Viable Chicks',         value: metrics.viable_chicks?.toLocaleString() },
+            { label: 'Cull Chicks',           value: hr.cull_chicks || 0 },
+            { label: 'Exploders',             value: hr.exploders   || 0 },
+            { label: 'Early Embryo Deaths',   value: cr?.early_dead ?? '—' },
+            { label: 'Late Embryo Deaths',    value: cr?.late_dead  ?? '—' },
+            { label: 'Fertility %',           value: metrics.fertility_pct + '%',        badge: getMetricBadge(metrics.fertility_pct, 85, 70) },
+            { label: 'Total Hatch %',         value: metrics.total_hatch_pct + '%',      badge: getMetricBadge(metrics.total_hatch_pct, 80, 65) },
+            { label: 'Hatch of Fertile %',    value: metrics.hatch_of_fertile_pct + '%', badge: getMetricBadge(metrics.hatch_of_fertile_pct, 88, 75) },
+            { label: 'Early Mortality %',     value: metrics.early_mort_pct + '%',       badge: getMetricBadgeInv(metrics.early_mort_pct, 2.5, 5) },
+            { label: 'Late Mortality %',      value: metrics.late_mort_pct + '%',        badge: getMetricBadgeInv(metrics.late_mort_pct, 2, 5) },
+            { label: 'Exploder Rate %',       value: metrics.exploder_pct + '%',         badge: getMetricBadgeInv(metrics.exploder_pct, 1, 2) },
+            { label: 'Cull Rate %',           value: metrics.cull_pct + '%',             badge: getMetricBadgeInv(metrics.cull_pct, 3, 8) },
+            ...(metrics.weight_loss_pct !== null ? [{ label: 'Egg Weight Loss %', value: metrics.weight_loss_pct + '%', badge: getWeightLossBadge(metrics.weight_loss_pct) }] : []),
+            ...(hr.batch_cost && metrics.viable_chicks > 0 ? [{ label: 'Cost per Chick', value: '₦' + Math.round(hr.batch_cost / metrics.viable_chicks).toLocaleString() }] : []),
+          ])}
+        </div>
+      </div>
+
+      <!-- Interpretation -->
+      <div>
+        <div class="card mb-16" style="border-color:var(--green-mid)">
+          <div class="card-header"><h3>✅ What's Working</h3></div>
+          <div class="card-body">
+            ${good.length ? good.map(g => `
+              <div style="padding:8px 0; border-bottom:1px solid var(--cream-dark)">
+                <div style="font-size:0.88rem; font-weight:600; color:var(--green-dark)">✓ ${g.text}</div>
+                <div style="font-size:0.78rem; color:var(--ink-faint); margin-top:2px">${g.detail}</div>
+              </div>`).join('') :
+              '<p style="font-size:0.85rem; color:var(--ink-faint)">No strong positives detected.</p>'}
+          </div>
+        </div>
+
+        ${issues.length ? `
+        <div class="card" style="border-color:var(--amber)">
+          <div class="card-header"><h3>⚠️ Areas to Address</h3></div>
+          <div class="card-body">
+            ${issues.map(i => `
+              <div class="alert alert-${i.sev==='critical'?'red':'amber'} mb-8">
+                <span class="alert-icon">${i.sev==='critical'?'🚨':'⚠️'}</span>
+                <div class="alert-text">
+                  <strong>${i.text}</strong>
+                  ${i.detail}
+                </div>
+              </div>`).join('')}
+          </div>
+        </div>` : ''}
+      </div>
+    </div>
+
+    <!-- Benchmark vs industry -->
+    <div class="card">
+      <div class="card-header"><h3>🏆 vs Industry Benchmarks</h3></div>
+      <div class="card-body">
+        ${buildBenchmark([
+          { label: 'Fertility Rate',      actual: metrics.fertility_pct,        target: 85, unit: '%' },
+          { label: 'Total Hatch %',       actual: metrics.total_hatch_pct,      target: 80, unit: '%' },
+          { label: 'Hatch of Fertile %',  actual: metrics.hatch_of_fertile_pct, target: 88, unit: '%' },
+          { label: 'Early Mortality %',   actual: metrics.early_mort_pct,       target: 2.5, unit: '%', invert: true },
+          { label: 'Late Mortality %',    actual: metrics.late_mort_pct,        target: 2,   unit: '%', invert: true },
+          { label: 'Exploder Rate %',     actual: metrics.exploder_pct,         target: 1,   unit: '%', invert: true },
+        ])}
+      </div>
+    </div>
+  `;
+
+  setTimeout(() => {
+    [
+      { id: 'br-fert',  pct: metrics.fertility_pct,        t:{good:85,warn:70} },
+      { id: 'br-hatch', pct: metrics.total_hatch_pct,      t:{good:80,warn:65} },
+      { id: 'br-hof',   pct: metrics.hatch_of_fertile_pct, t:{good:88,warn:75} },
+    ].forEach(r => {
+      const color = r.pct >= r.t.good ? 'var(--green-mid)' : r.pct >= r.t.warn ? 'var(--amber)' : 'var(--red-alert)';
+      renderMetricRing(r.id, Math.min(100, r.pct), color);
+    });
+  }, 50);
+}
+
+// ── Helper Renderers ──
+
+function buildRingItems(items) {
+  return items.map(r => `
+    <div class="ring-item">
+      <div class="metric-ring" id="${r.id}">
+        <svg width="90" height="90" viewBox="0 0 90 90"><circle class="metric-ring-track" cx="45" cy="45" r="36"/></svg>
+      </div>
+      <div class="ring-value">${r.pct ? r.pct.toFixed(1) + '%' : '—'}</div>
+      <div class="ring-label">${r.label}</div>
+    </div>`).join('');
+}
+
+function buildBenchmark(rows) {
+  return rows.map(r => {
+    const pct    = Math.min(100, (r.actual / (r.invert ? r.target * 3 : r.target * 1.2)) * 100);
+    const good   = r.invert ? r.actual <= r.target : r.actual >= r.target;
+    const warn   = r.invert ? r.actual <= r.target * 1.5 : r.actual >= r.target * 0.85;
+    const color  = good ? 'var(--green-mid)' : warn ? 'var(--amber)' : 'var(--red-alert)';
+    const barPct = r.invert ? Math.max(5, 100 - (r.actual / (r.target * 3)) * 100) : Math.min(100, (r.actual / r.target) * 100);
+    return `
+      <div class="perf-meter">
+        <div class="perf-meter-info">
+          <div class="perf-meter-name">${r.label}</div>
+          <div class="perf-meter-sub">Target: ${r.invert ? '≤' : '≥'}${r.target}${r.unit}</div>
+        </div>
+        <div class="perf-meter-bar">
+          <div class="progress-wrap">
+            <div class="progress-bar" style="width:${barPct}%; background:${color}"></div>
+          </div>
+        </div>
+        <div class="perf-meter-value" style="color:${color}">${r.actual.toFixed(1)}${r.unit}</div>
+      </div>`;
+  }).join('');
+}
+
+function buildMetricRows(rows) {
+  return rows.map(r => `
+    <div class="flex justify-between items-center" style="padding:8px 0; border-bottom:1px solid var(--cream-dark); gap:8px">
+      <span style="font-size:0.82rem; color:var(--ink-mid)">${r.label}</span>
+      <span style="font-size:0.88rem; font-weight:600; color:var(--ink)">
+        ${r.badge ? `<span class="badge ${r.badge}">${r.value}</span>` : r.value}
+      </span>
+    </div>`).join('');
+}
+
+function getMetricBadge(v, good, warn)     { return v >= good ? 'badge-green' : v >= warn ? 'badge-amber' : 'badge-red'; }
+function getMetricBadgeInv(v, warn, bad)   { return v <= warn ? 'badge-green' : v <= bad  ? 'badge-amber' : 'badge-red'; }
+function getWeightLossBadge(v)             { return v >= 11 && v <= 13 ? 'badge-green' : 'badge-amber'; }
+</script>
+</body>
+</html>
