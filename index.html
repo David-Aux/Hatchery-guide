@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Hatchery Guide — Incubation Intelligence</title>
+  <link rel="stylesheet" href="styles.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body { background: var(--green-dark); overflow: hidden; }
+
+    .auth-page {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    /* ── Left panel ── */
+    .auth-hero {
+      background: var(--green-dark);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 48px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .auth-hero::before {
+      content: '';
+      position: absolute;
+      width: 600px; height: 600px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(217,119,6,0.15) 0%, transparent 70%);
+      top: -100px; left: -100px;
+      pointer-events: none;
+    }
+
+    .auth-hero::after {
+      content: '';
+      position: absolute;
+      width: 400px; height: 400px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(21,128,61,0.3) 0%, transparent 70%);
+      bottom: -80px; right: -80px;
+      pointer-events: none;
+    }
+
+    .hero-logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero-logo-icon {
+      width: 52px; height: 52px;
+      background: var(--amber);
+      border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.6rem;
+      box-shadow: 0 4px 20px rgba(217,119,6,0.5);
+    }
+
+    .hero-logo-text {
+      font-family: var(--font-display);
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.2;
+    }
+
+    .hero-logo-text span {
+      display: block;
+      font-family: var(--font-body);
+      font-size: 0.7rem;
+      font-weight: 400;
+      color: rgba(255,255,255,0.5);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .hero-content {
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(217,119,6,0.2);
+      border: 1px solid rgba(217,119,6,0.4);
+      color: var(--amber-light);
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 5px 12px;
+      border-radius: 99px;
+      margin-bottom: 20px;
+    }
+
+    .hero-h1 {
+      font-family: var(--font-display);
+      font-size: clamp(2rem, 4vw, 3rem);
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.15;
+      margin-bottom: 20px;
+    }
+
+    .hero-h1 em {
+      font-style: italic;
+      color: var(--amber-light);
+    }
+
+    .hero-p {
+      font-size: 0.95rem;
+      color: rgba(255,255,255,0.6);
+      line-height: 1.7;
+      max-width: 380px;
+      margin-bottom: 32px;
+    }
+
+    .hero-stats {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+
+    .hero-stat {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .hero-stat-value {
+      font-family: var(--font-display);
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: var(--amber-light);
+      line-height: 1;
+    }
+
+    .hero-stat-label {
+      font-size: 0.72rem;
+      color: rgba(255,255,255,0.45);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .hero-footer {
+      position: relative; z-index: 1;
+    }
+
+    .hero-pillars {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .hero-pillar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 99px;
+      padding: 6px 12px;
+      font-size: 0.75rem;
+      color: rgba(255,255,255,0.7);
+      font-weight: 500;
+    }
+
+    /* ── Right panel ── */
+    .auth-form-panel {
+      background: var(--cream);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 48px;
+    }
+
+    .auth-card {
+      width: 100%;
+      max-width: 400px;
+    }
+
+    .auth-card-header {
+      margin-bottom: 32px;
+    }
+
+    .auth-card-header h2 {
+      font-size: 1.8rem;
+      margin-bottom: 6px;
+    }
+
+    .auth-card-header p {
+      font-size: 0.9rem;
+      color: var(--ink-light);
+    }
+
+    .auth-tabs {
+      display: flex;
+      gap: 4px;
+      background: var(--cream-dark);
+      border-radius: var(--radius-md);
+      padding: 4px;
+      margin-bottom: 28px;
+    }
+
+    .auth-tab {
+      flex: 1;
+      padding: 9px;
+      border-radius: var(--radius-sm);
+      border: none;
+      background: transparent;
+      font-family: var(--font-body);
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--ink-light);
+      cursor: pointer;
+      transition: all 0.18s;
+    }
+
+    .auth-tab.active {
+      background: #fff;
+      color: var(--ink);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .divider-or {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 20px 0;
+      color: var(--ink-faint);
+      font-size: 0.78rem;
+    }
+
+    .divider-or::before,
+    .divider-or::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--parchment);
+    }
+
+    .auth-footer-note {
+      text-align: center;
+      font-size: 0.78rem;
+      color: var(--ink-faint);
+      margin-top: 20px;
+    }
+
+    @media (max-width: 768px) {
+      body { overflow: auto; }
+      .auth-page { grid-template-columns: 1fr; }
+      .auth-hero  { display: none; }
+      .auth-form-panel { padding: 32px 24px; min-height: 100vh; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="auth-page">
+  <!-- Hero -->
+  <div class="auth-hero">
+    <div class="hero-logo">
+      <div class="hero-logo-icon">🐣</div>
+      <div class="hero-logo-text">
+        Hatchery Guide
+        <span>Incubation Intelligence Platform</span>
+      </div>
+    </div>
+
+    <div class="hero-content">
+      <div class="hero-tag">🌍 Built for Africa</div>
+      <h1 class="hero-h1">
+        Precision data for<br/>
+        <em>every egg that hatches.</em>
+      </h1>
+      <p class="hero-p">
+        Stop running your hatchery on guesswork. Track batches, monitor embryo health,
+        calculate hatchability, and get AI-powered insights — all in one place.
+      </p>
+      <div class="hero-stats">
+        <div class="hero-stat">
+          <div class="hero-stat-value">21</div>
+          <div class="hero-stat-label">Day Tracker</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-value">6+</div>
+          <div class="hero-stat-label">Key Metrics</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-value">AI</div>
+          <div class="hero-stat-label">Insights</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="hero-footer">
+      <div class="hero-pillars">
+        <div class="hero-pillar">🧠 Incubation Intelligence</div>
+        <div class="hero-pillar">📊 Hatchery Analytics</div>
+        <div class="hero-pillar">🗂 Batch Management</div>
+        <div class="hero-pillar">📡 IoT Ready</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Form Panel -->
+  <div class="auth-form-panel">
+    <div class="auth-card">
+      <div class="auth-card-header">
+        <h2>Welcome back</h2>
+        <p>Sign in to your Hatchery Guide account</p>
+      </div>
+
+      <div class="auth-tabs">
+        <button class="auth-tab active" onclick="switchTab('login', this)">Sign In</button>
+        <button class="auth-tab" onclick="switchTab('signup', this)">Create Account</button>
+      </div>
+
+      <!-- Login Form -->
+      <div id="login-form">
+        <div class="form-group">
+          <label class="form-label">Email Address</label>
+          <input type="email" class="form-input" id="login-email" placeholder="you@hatchery.com"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <input type="password" class="form-input" id="login-password" placeholder="••••••••"/>
+        </div>
+        <button class="btn btn-primary btn-full btn-lg" onclick="handleLogin()" id="login-btn">
+          Sign In
+        </button>
+        <p class="auth-footer-note">
+          <a href="#" onclick="showForgotPassword()">Forgot your password?</a>
+        </p>
+      </div>
+
+      <!-- Signup Form -->
+      <div id="signup-form" class="hidden">
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Full Name <span class="required">*</span></label>
+            <input type="text" class="form-input" id="signup-name" placeholder="Your Name"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Hatchery Name</label>
+            <input type="text" class="form-input" id="signup-hatchery" placeholder="ABC Farms"/>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email Address <span class="required">*</span></label>
+          <input type="email" class="form-input" id="signup-email" placeholder="you@hatchery.com"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Password <span class="required">*</span></label>
+          <input type="password" class="form-input" id="signup-password" placeholder="At least 8 characters"/>
+          <span class="form-hint">Must be at least 8 characters</span>
+        </div>
+        <button class="btn btn-green btn-full btn-lg" onclick="handleSignup()" id="signup-btn">
+          Create Account
+        </button>
+        <p class="auth-footer-note">
+          By creating an account you agree to our terms of service.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script src="app.js"></script>
+<script>
+  const APP_URL = 'https://david-aux.github.io/Hatchery-guide/';
+
+  // ── Handle email confirmation redirect ──────
+  // When Supabase redirects back after email confirmation,
+  // the token arrives as a hash fragment. We exchange it for a session.
+  (async () => {
+    const hash   = window.location.hash;
+    const params = new URLSearchParams(hash.replace('#', ''));
+    const type   = params.get('type');
+    const token  = params.get('access_token');
+
+    // Email confirmation redirect
+    if (type === 'signup' && token) {
+      // Session is already set by Supabase JS — just redirect to dashboard
+      const { data: { user } } = await db.auth.getUser();
+      if (user) {
+        window.location.href = 'dashboard.html';
+        return;
+      }
+    }
+
+    // Password reset redirect
+    if (type === 'recovery' && token) {
+      // Show password reset form
+      showPasswordResetForm();
+      return;
+    }
+
+    // Already logged in — go straight to dashboard
+    const { data: { user } } = await db.auth.getUser();
+    if (user) window.location.href = 'dashboard.html';
+  })();
+
+  function switchTab(tab, btn) {
+    document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('login-form').classList.toggle('hidden', tab !== 'login');
+    document.getElementById('signup-form').classList.toggle('hidden', tab !== 'signup');
+  }
+
+  async function handleLogin() {
+    const email    = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+    const btn      = document.getElementById('login-btn');
+
+    if (!email || !password) { toast('Please fill in all fields.', 'error'); return; }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Signing in…';
+
+    const { error } = await db.auth.signInWithPassword({ email, password });
+
+    if (error) {
+      // Give a clear message if email not confirmed yet
+      const msg = error.message.includes('Email not confirmed')
+        ? 'Please confirm your email first. Check your inbox for the confirmation link.'
+        : error.message;
+      toast(msg, 'error', 5000);
+      btn.disabled = false;
+      btn.innerHTML = 'Sign In';
+    } else {
+      toast('Welcome back!', 'success');
+      setTimeout(() => window.location.href = 'dashboard.html', 800);
+    }
+  }
+
+  async function handleSignup() {
+    const name     = document.getElementById('signup-name').value.trim();
+    const hatchery = document.getElementById('signup-hatchery').value.trim();
+    const email    = document.getElementById('signup-email').value.trim();
+    const password = document.getElementById('signup-password').value;
+    const btn      = document.getElementById('signup-btn');
+
+    if (!name || !email || !password) { toast('Please fill required fields.', 'error'); return; }
+    if (password.length < 8)          { toast('Password must be at least 8 characters.', 'error'); return; }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Creating account…';
+
+    const { data, error } = await db.auth.signUp({
+      email,
+      password,
+      options: {
+        // After confirming email, Supabase redirects here
+        emailRedirectTo: APP_URL + 'index.html',
+        data: {
+          full_name:     name,
+          hatchery_name: hatchery || name + "'s Hatchery",
+        }
+      }
+    });
+
+    if (error) {
+      toast(error.message, 'error');
+      btn.disabled = false;
+      btn.innerHTML = 'Create Account';
+      return;
+    }
+
+    // Save profile immediately (will be accessible after confirmation)
+    if (data.user) {
+      await db.from('profiles').upsert({
+        id:            data.user.id,
+        full_name:     name,
+        hatchery_name: hatchery || name + "'s Hatchery",
+        email,
+      });
+    }
+
+    // Show confirmation message
+    document.getElementById('signup-form').innerHTML = `
+      <div class="alert alert-green" style="margin-bottom:16px">
+        <span class="alert-icon">✉️</span>
+        <div class="alert-text">
+          <strong>Check your email!</strong>
+          We sent a confirmation link to <strong>${email}</strong>.
+          Click it to activate your account then come back to sign in.
+        </div>
+      </div>
+      <p style="font-size:0.82rem; color:var(--ink-faint); text-align:center; margin-top:12px">
+        Didn't receive it? Check your spam folder or
+        <a href="#" onclick="resendConfirmation('${email}')">resend the email</a>.
+      </p>
+    `;
+  }
+
+  async function resendConfirmation(email) {
+    const { error } = await db.auth.resend({ type: 'signup', email });
+    if (error) toast(error.message, 'error');
+    else toast('Confirmation email resent to ' + email, 'success');
+  }
+
+  async function showForgotPassword() {
+    const email = document.getElementById('login-email').value.trim();
+    if (!email) { toast('Enter your email address first.', 'warning'); return; }
+    const { error } = await db.auth.resetPasswordForEmail(email, {
+      redirectTo: APP_URL + 'index.html',
+    });
+    if (error) toast(error.message, 'error');
+    else toast('Password reset link sent to ' + email, 'success', 5000);
+  }
+
+  function showPasswordResetForm() {
+    // Replace the form panel with a password reset form
+    const card = document.querySelector('.auth-card');
+    if (!card) return;
+    card.innerHTML = `
+      <div class="auth-card-header">
+        <h2>Set New Password</h2>
+        <p>Enter your new password below.</p>
+      </div>
+      <div class="form-group">
+        <label class="form-label">New Password</label>
+        <input type="password" class="form-input" id="new-password" placeholder="At least 8 characters"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Confirm Password</label>
+        <input type="password" class="form-input" id="confirm-password" placeholder="Repeat password"/>
+      </div>
+      <button class="btn btn-primary btn-full btn-lg" onclick="handlePasswordReset()">
+        Update Password
+      </button>
+    `;
+  }
+
+  async function handlePasswordReset() {
+    const pass1 = document.getElementById('new-password').value;
+    const pass2 = document.getElementById('confirm-password').value;
+    if (pass1.length < 8)   { toast('Password must be at least 8 characters.', 'error'); return; }
+    if (pass1 !== pass2)    { toast('Passwords do not match.', 'error'); return; }
+
+    const { error } = await db.auth.updateUser({ password: pass1 });
+    if (error) { toast(error.message, 'error'); return; }
+    toast('Password updated! Signing you in…', 'success');
+    setTimeout(() => window.location.href = 'dashboard.html', 1200);
+  }
+
+  // Enter key support
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      const loginVisible = !document.getElementById('login-form')?.classList.contains('hidden');
+      loginVisible ? handleLogin() : handleSignup();
+    }
+  });
+</script>
+</body>
+</html>
