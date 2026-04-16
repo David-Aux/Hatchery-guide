@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>About — Hatchery Guide</title>
+  <link rel="stylesheet" href="styles.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    .about-hero {
+      background: linear-gradient(135deg, var(--amber-pale) 0%, var(--cream-dark) 100%);
+      border-radius: var(--radius-xl);
+      padding: 40px 36px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      border: 1px solid var(--cream-dark);
+    }
+    .about-hero-icon {
+      font-size: 3.5rem;
+      flex-shrink: 0;
+    }
+    .about-hero h1 {
+      font-size: 1.75rem;
+      margin-bottom: 6px;
+    }
+    .about-hero p {
+      font-size: 0.95rem;
+      color: var(--ink-mid);
+      margin: 0;
+      line-height: 1.6;
+    }
+
+    .about-card {
+      background: #fff;
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--parchment, #E8D9C0);
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+    .about-card-header {
+      padding: 20px 28px;
+      border-bottom: 1px solid var(--cream-dark);
+      background: var(--cream);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .about-card-header .header-icon {
+      font-size: 1.3rem;
+    }
+    .about-card-header h3 {
+      font-size: 1rem;
+      margin: 0;
+    }
+    .about-card-body {
+      padding: 28px;
+    }
+    .about-card-body p {
+      line-height: 1.7;
+      margin-bottom: 12px;
+    }
+    .about-card-body p:last-child {
+      margin-bottom: 0;
+    }
+
+    /* Feature grid */
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 16px;
+    }
+    .feature-item {
+      background: var(--cream);
+      border-radius: var(--radius-md);
+      padding: 18px 20px;
+      border: 1px solid var(--cream-dark);
+    }
+    .feature-item .f-icon {
+      font-size: 1.5rem;
+      margin-bottom: 10px;
+    }
+    .feature-item .f-title {
+      font-size: 0.875rem;
+      font-weight: 700;
+      color: var(--ink);
+      margin-bottom: 4px;
+    }
+    .feature-item .f-desc {
+      font-size: 0.8rem;
+      color: var(--ink-light);
+      line-height: 1.5;
+    }
+
+    /* Contact rows */
+    .contact-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 16px 0;
+      border-bottom: 1px solid var(--cream-dark);
+    }
+    .contact-row:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+    .contact-icon-wrap {
+      width: 44px;
+      height: 44px;
+      border-radius: var(--radius-md);
+      background: var(--amber-pale);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      flex-shrink: 0;
+    }
+    .contact-label {
+      font-size: 0.75rem;
+      color: var(--ink-faint);
+      margin-bottom: 2px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .contact-value {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .contact-value a {
+      color: var(--amber-dark);
+      font-weight: 600;
+    }
+    .contact-value a:hover {
+      color: var(--amber);
+    }
+
+    /* Version badge */
+    .version-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--amber-pale);
+      color: var(--amber-dark);
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 4px 12px;
+      border-radius: 999px;
+      border: 1px solid #F6D28A;
+      margin-top: 10px;
+    }
+
+    @media (max-width: 600px) {
+      .about-hero {
+        flex-direction: column;
+        text-align: center;
+        padding: 28px 20px;
+      }
+      .about-card-body {
+        padding: 20px;
+      }
+      .about-card-header {
+        padding: 16px 20px;
+      }
+      .feature-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+<script src="app.js"></script>
+<script src="shell.js"></script>
+<script>
+(async () => {
+  const ctx = await initShell({ page: 'about', title: 'About' });
+  if (!ctx) return;
+
+  const body = document.getElementById('page-body');
+  body.innerHTML = `
+
+    <!-- Hero -->
+    <div class="about-hero">
+      <div class="about-hero-icon">🐣</div>
+      <div>
+        <h1>Hatchery Guide</h1>
+        <p>Incubation intelligence built for African hatcheries. Track batches, monitor hatch rates, and make data-driven decisions — all in one platform.</p>
+        <span class="version-badge">✦ Version 1.0</span>
+      </div>
+    </div>
+
+    <!-- About the platform -->
+    <div class="about-card">
+      <div class="about-card-header">
+        <span class="header-icon">📖</span>
+        <h3>About the Platform</h3>
+      </div>
+      <div class="about-card-body">
+        <p>Hatchery Guide is an incubation intelligence platform designed specifically for poultry hatcheries across Africa. Whether you manage a small village operation or a large commercial facility, Hatchery Guide gives you the tools to track every batch from set to hatch — and learn from the data along the way.</p>
+        <p>From candling entries to final hatch results, every data point you record builds a picture of your hatchery's performance over time. Our analytics surface trends in fertility, hatchability, and incubator efficiency so you can act on insight rather than instinct.</p>
+        <p>Hatchery Guide is built with the realities of African hatchery operations in mind — practical, offline-tolerant, and focused on the metrics that matter most.</p>
+      </div>
+    </div>
+
+    <!-- Key features -->
+    <div class="about-card">
+      <div class="about-card-header">
+        <span class="header-icon">🌟</span>
+        <h3>What You Can Do</h3>
+      </div>
+      <div class="about-card-body">
+        <div class="feature-grid">
+          <div class="feature-item">
+            <div class="f-icon">🥚</div>
+            <div class="f-title">Batch Tracking</div>
+            <div class="f-desc">Record every batch from set date to hatch day with full breed and incubator details.</div>
+          </div>
+          <div class="feature-item">
+            <div class="f-icon">🕯️</div>
+            <div class="f-title">Candling Logs</div>
+            <div class="f-desc">Log candling results at Day 7 and Day 14 to monitor fertility and early mortality.</div>
+          </div>
+          <div class="feature-item">
+            <div class="f-icon">🐥</div>
+            <div class="f-title">Hatch Results</div>
+            <div class="f-desc">Capture final chick counts, culls, and unhatched eggs for accurate hatchability rates.</div>
+          </div>
+          <div class="feature-item">
+            <div class="f-icon">🧬</div>
+            <div class="f-title">Analytics</div>
+            <div class="f-desc">Visualise performance trends across batches, breeds, and incubators over time.</div>
+          </div>
+          <div class="feature-item">
+            <div class="f-icon">🌡️</div>
+            <div class="f-title">Incubation Guide</div>
+            <div class="f-desc">Species-specific temperature, humidity, and turning schedules built into the app.</div>
+          </div>
+          <div class="feature-item">
+            <div class="f-icon">🔔</div>
+            <div class="f-title">Smart Alerts</div>
+            <div class="f-desc">Get timely reminders for candling windows, lockdown, and expected hatch days.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Contact -->
+    <div class="about-card">
+      <div class="about-card-header">
+        <span class="header-icon">📬</span>
+        <h3>Contact Us</h3>
+      </div>
+      <div class="about-card-body">
+        <p style="margin-bottom:20px;">Have a question, a feature request, or need support? Reach us through any of the channels below — we're here to help.</p>
+
+        <div class="contact-row">
+          <div class="contact-icon-wrap">✉️</div>
+          <div>
+            <div class="contact-label">Email</div>
+            <div class="contact-value"><a href="mailto:Hatcheryguide@proton.me">Hatcheryguide@proton.me</a></div>
+          </div>
+        </div>
+
+        <div class="contact-row">
+          <div class="contact-icon-wrap">💬</div>
+          <div>
+            <div class="contact-label">WhatsApp</div>
+            <div class="contact-value"><a href="https://wa.me/2348142472213" target="_blank">+234 814 247 2213</a></div>
+          </div>
+        </div>
+
+        <div class="contact-row">
+          <div class="contact-icon-wrap">🕐</div>
+          <div>
+            <div class="contact-label">Response Time</div>
+            <div class="contact-value">Usually within 24 hours</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  `;
+})();
+</script>
+</body>
+</html>
